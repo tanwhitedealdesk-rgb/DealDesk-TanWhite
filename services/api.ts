@@ -1,0 +1,182 @@
+
+import { createClient } from '@supabase/supabase-js';
+import { SUPABASE_URL, SUPABASE_KEY, GOOGLE_SCRIPT_URL } from '../constants';
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+export interface Recipient {
+    email: string;
+    name: string;
+    city?: string;
+}
+
+export const DEFAULT_DEALS: any[] = [];
+
+// Helper to clean array fields
+function cleanArrayField(field: any, isArray: boolean): any[] {
+    if (!field) return [];
+    if (Array.isArray(field)) return field;
+    if (typeof field === 'string') {
+        try {
+            const parsed = JSON.parse(field);
+            if (Array.isArray(parsed)) return parsed;
+            return [field];
+        } catch (e) {
+            return field.split(',').map((s: string) => s.trim()).filter(Boolean);
+        }
+    }
+    return [];
+}
+
+// Helper to process items coming FROM the database
+const processIncomingItem = (item: any, tableName: string) => {
+    const processed = { ...item };
+    
+    // Normalize timestamps: Ensure createdAt exists if created_at is present
+    if (processed.created_at && !processed.createdAt) {
+        processed.createdAt = processed.created_at;
+    }
+    
+    if (tableName === 'Deals') {
+        processed.photos = cleanArrayField(processed.photos, false).filter(Boolean);
+        processed.dealType = Array.from(new Set(cleanArrayField(processed.dealType, true))).filter(Boolean);
+        processed.logs = cleanArrayField(processed.logs, false).filter(Boolean);
+    }
+
+    if (tableName === 'Wholesalers') {
+        processed.notes = cleanArrayField(processed.notes, false).filter(Boolean);
+        if (typeof processed.properties === 'string') {
+            try { processed.properties = JSON.parse(processed.properties); } catch { }
+        }
+        if (!Array.isArray(processed.properties)) processed.properties = [];
+    }
+    
+    // Process Buyers
+    if (tableName === 'Buyers') {
+        processed.notes = cleanArrayField(processed.notes, false).filter(Boolean);
+        if (processed.buyBox && typeof processed.buyBox === 'string') {
+             try { processed.buyBox = JSON.parse(processed.buyBox); } catch {}
+        }
+    }
+
+    // Process Agents
+    if (tableName === 'Agents') {
+        processed.notes = cleanArrayField(processed.notes, false).filter(Boolean);
+        processed.closedDealIds = cleanArrayField(processed.closedDealIds, false).filter(Boolean);
+    }
+    
+    return processed;
+};
+
+export const sendEmail = async (email: string, subject: string, body: string) => {
+    if (!GOOGLE_SCRIPT_URL) {
+        console.warn("No Google Script URL defined for emailing.");
+        return;
+    }
+    try {
+        await fetch(GOOGLE_SCRIPT_URL, {
+            method: 'POST',
+            body: JSON.stringify({
+                action: 'send_email',
+                recipient: email,
+                subject: subject,
+                body: body
+            }),
+            mode: 'no-cors' // Often needed for GAS web apps depending on deployment
+        });
+    } catch (e) {
+        console.error("Email send error:", e);
+    }
+};
+
+export const sendBulkEmailGAS = async (recipients: any[], subject: string, body: string, fromAddress?: string) => {
+    if (!GOOGLE_SCRIPT_URL) throw new Error("Script URL missing");
+    
+    const response = await fetch(GOOGLE_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+            action: 'send_bulk_email',
+            recipients: recipients,
+            subject: subject,
+            body: body,
+            from: fromAddress
+        })
+    });
+    
+    // GAS often returns opaque responses with no-cors, but if we use cors:
+    const data = await response.json();
+    return data;
+};
+
+export const executeAdminSql = async (query: string) => {
+    // Assuming this proxies through the Google Script or a Supabase Edge Function
+    // Since direct SQL execution isn't standard in supabase-js client without RPC
+    if (GOOGLE_SCRIPT_URL) {
+        const response = await fetch(GOOGLE_SCRIPT_URL, {
+            method: 'POST',
+            body: JSON.stringify({
+                action: 'execute_sql',
+                query: query
+            })
+        });
+        return await response.json();
+    }
+    
+    // Fallback: Try Supabase RPC if exists
+    const { data, error } = await supabase.rpc('execute_sql', { query });
+    if (error) return { status: 'error', message: error.message };
+    return { status: 'success', data };
+};
+
+export const api = {
+    load: async (table: string) => {
+        const { data, error } = await supabase.from(table).select('*');
+        if (error) {
+            console.error(`Error loading ${table}:`, error);
+            throw error;
+        }
+        return data.map(item => processIncomingItem(item, table));
+    },
+
+    save: async (item: any, table: string) => {
+        // Strip ID if it looks like a temp ID or let Supabase handle it if UUID
+        const payload = { ...item };
+        
+        // Ensure JSON fields are stringified if needed for text columns
+        if (table === 'Wholesalers' && payload.properties && typeof payload.properties === 'object') {
+            payload.properties = JSON.stringify(payload.properties);
+        }
+        
+        const { data, error } = await supabase.from(table).upsert(payload).select().single();
+        if (error) {
+            console.error(`Error saving to ${table}:`, error);
+            return null;
+        }
+        return processIncomingItem(data, table);
+    },
+
+    saveBatch: async (items: any[], table: string) => {
+        const { data, error } = await supabase.from(table).upsert(items).select();
+        if (error) {
+            console.error(`Error batch saving to ${table}:`, error);
+            return null;
+        }
+        return data.map(item => processIncomingItem(item, table));
+    },
+
+    delete: async (id: string, table: string) => {
+        const { error } = await supabase.from(table).delete().eq('id', id);
+        if (error) {
+            console.error(`Error deleting from ${table}:`, error);
+            return false;
+        }
+        return true;
+    },
+
+    saveCampaign: async (campaign: any) => {
+        // Ensure deliveryLogs is JSON
+        const payload = { ...campaign };
+        // Clean up or format specific fields if necessary
+        return api.save(payload, 'Campaigns');
+    }
+};

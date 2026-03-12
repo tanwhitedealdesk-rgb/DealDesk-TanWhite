@@ -1,0 +1,344 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Save, ArrowRight, FileSpreadsheet, AlertCircle, Loader2, Check } from 'lucide-react';
+import { Buyer, BuyBox } from '../../types';
+import { generateId, getLogTimestamp, parseNumberFromCurrency, formatPhoneNumber } from '../../services/utils';
+
+// Access global XLSX from CDN
+declare const XLSX: any;
+
+interface ImportBuyerMapModalProps {
+    file: File;
+    onClose: () => void;
+    onImport: (buyers: Buyer[], overwrite: boolean) => void;
+}
+
+const FIELD_DEFINITIONS: { key: string, label: string, aliases: string[], type: 'string' | 'number' | 'array' }[] = [
+    { key: 'name', label: 'Contact Name', aliases: ['name', 'contact', 'full name', 'buyer', 'client'], type: 'string' },
+    { key: 'companyName', label: 'Company Name', aliases: ['company', 'entity', 'llc', 'business'], type: 'string' },
+    { key: 'email', label: 'Email', aliases: ['email', 'email address', 'mail'], type: 'string' },
+    { key: 'phone', label: 'Formatted Phone Number', aliases: ['phone', 'mobile', 'cell', 'number'], type: 'string' },
+    { key: 'status', label: 'Buyer Status', aliases: ['status', 'lead status', 'stage', 'buyer status'], type: 'string' },
+    { key: 'lastContactDate', label: 'Last Contact', aliases: ['last contact', 'last activity', 'activity date', 'last touch', 'last contact date'], type: 'string' },
+    { key: 'propertiesBought', label: 'Properties Bought', aliases: ['bought', 'purchased', 'deal count', 'closed'], type: 'number' },
+    
+    // Buy Box Fields (Nested)
+    { key: 'buyBox.locations', label: 'Buy Box Locations', aliases: ['locations', 'areas', 'zip codes', 'markets', 'submarkets', 'cities', 'counties'], type: 'string' },
+    { key: 'buyBox.minPrice', label: 'Min Price', aliases: ['min price', 'price min', 'budget min'], type: 'number' },
+    { key: 'buyBox.maxPrice', label: 'Max Price', aliases: ['max price', 'price max', 'budget max', 'budget'], type: 'number' },
+    { key: 'buyBox.minArv', label: 'Min ARV', aliases: ['min arv', 'arv min', 'minimum arv'], type: 'number' },
+    { key: 'buyBox.maxRenoBudget', label: 'Max Reno Budget', aliases: ['max reno', 'reno budget', 'max renovation', 'renovation budget', 'max reno budget'], type: 'number' },
+    { key: 'buyBox.propertyTypes', label: 'Property Types', aliases: ['property type', 'strategy', 'type', 'asset type'], type: 'string' },
+    { key: 'buyBox.minBedrooms', label: 'Min Beds', aliases: ['beds', 'bedrooms', 'min beds'], type: 'number' },
+    { key: 'buyBox.minBathrooms', label: 'Min Baths', aliases: ['baths', 'bathrooms', 'min baths'], type: 'number' },
+    { key: 'buyBox.minSqft', label: 'Min Sqft', aliases: ['sqft', 'min sqft', 'size'], type: 'number' },
+    { key: 'buyBox.maxSqft', label: 'Max Sqft', aliases: ['max sqft'], type: 'number' },
+    { key: 'buyBox.notes', label: 'Criteria/Notes', aliases: ['notes', 'criteria', 'buy box notes', 'requirements'], type: 'string' },
+];
+
+export const ImportBuyerMapModal: React.FC<ImportBuyerMapModalProps> = ({ file, onClose, onImport }) => {
+    const [step, setStep] = useState<'analyzing' | 'mapping'>('analyzing');
+    const [headers, setHeaders] = useState<string[]>([]);
+    const [rawData, setRawData] = useState<any[][]>([]);
+    const [mapping, setMapping] = useState<Record<string, string>>({}); // HeaderIndex -> BuyerKey
+    const [importing, setImporting] = useState(false);
+    const [overwrite, setOverwrite] = useState(false);
+    
+    const processedFileRef = useRef<File | null>(null);
+
+    useEffect(() => {
+        if (!file) return;
+        if (file === processedFileRef.current) return;
+        
+        processedFileRef.current = file;
+        
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = e.target?.result;
+                const workbook = XLSX.read(data, { type: 'binary' });
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][]; 
+                
+                if (jsonData && jsonData.length > 0) {
+                    const fileHeaders = jsonData[0].map(h => String(h));
+                    const fileRows = jsonData.slice(1).filter(r => r.length > 0);
+                    
+                    setHeaders(fileHeaders);
+                    setRawData(fileRows);
+                    
+                    // Smart Mapping Logic
+                    const initialMapping: Record<string, string> = {};
+                    fileHeaders.forEach((header, idx) => {
+                        const normHeader = header.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+                        
+                        const match = FIELD_DEFINITIONS.find(def => 
+                            def.aliases.some(alias => {
+                                const normAlias = alias.replace(/[^a-z0-9]/g, '');
+                                return normHeader === normAlias || normHeader.includes(normAlias) || normAlias.includes(normHeader);
+                            })
+                        );
+                        
+                        if (match) {
+                            initialMapping[idx.toString()] = match.key;
+                        }
+                    });
+                    
+                    setMapping(initialMapping);
+                    setStep('mapping');
+                } else {
+                    alert('File appears to be empty');
+                    onClose();
+                }
+            } catch (err) {
+                console.error("Error parsing file", err);
+                alert("Failed to parse file. Please ensure it is a valid CSV or Excel file.");
+                onClose();
+            }
+        };
+        reader.readAsBinaryString(file);
+    }, [file, onClose]);
+
+    const handleMappingChange = (headerIndex: string, fieldKey: string) => {
+        setMapping(prev => ({
+            ...prev,
+            [headerIndex]: fieldKey
+        }));
+    };
+
+    const processImport = () => {
+        setImporting(true);
+        setTimeout(() => {
+            const newBuyers: Buyer[] = rawData.map(row => {
+                const buyer: any = {
+                    id: generateId(),
+                    dateAdded: new Date().toISOString(), // Added field for sorting
+                    status: 'New Lead',
+                    propertiesBought: 0,
+                    notes: [`${getLogTimestamp()}: Imported from ${file.name}`],
+                    buyBox: {
+                        locations: '',
+                        minPrice: 0,
+                        maxPrice: 0,
+                        minArv: 0,
+                        maxRenoBudget: 0,
+                        propertyTypes: [],
+                        minBedrooms: 0,
+                        minBathrooms: 0,
+                        minSqft: 0,
+                        maxSqft: 0,
+                        notes: ''
+                    }
+                };
+
+                // Apply mappings
+                Object.entries(mapping).forEach(([colIdx, key]) => {
+                    const fieldKey = key as string;
+                    const val = row[parseInt(colIdx)] as any;
+                    
+                    if (val !== undefined && val !== null && fieldKey) {
+                        
+                        // Handle Nested BuyBox Fields
+                        if (fieldKey.startsWith('buyBox.')) {
+                            const subKey = fieldKey.split('.')[1] as keyof BuyBox;
+                            const fieldDef = FIELD_DEFINITIONS.find(f => f.key === fieldKey);
+
+                            if (fieldDef?.type === 'number') {
+                                if (typeof val === 'string') {
+                                    buyer.buyBox[subKey] = parseNumberFromCurrency(val);
+                                } else {
+                                    buyer.buyBox[subKey] = Number(val) || 0;
+                                }
+                            } else {
+                                // Handle string or array fields
+                                if (subKey === 'propertyTypes') {
+                                    // Try to split comma separated lists
+                                    if (typeof val === 'string') {
+                                        buyer.buyBox[subKey] = val.split(',').map(s => s.trim());
+                                    } else {
+                                        buyer.buyBox[subKey] = [String(val)];
+                                    }
+                                } else {
+                                    buyer.buyBox[subKey] = String(val).trim();
+                                }
+                            }
+                        } else if (fieldKey === 'phone') {
+                            const strVal = String(val).trim();
+                            // Handle potential multiple numbers
+                            const parts = strVal.split(',').map(p => {
+                                let cleaned = p.replace(/\D/g, '');
+                                // Basic cleanup for 11 digit US numbers starting with 1
+                                if (cleaned.length === 11 && cleaned.startsWith('1')) {
+                                    cleaned = cleaned.substring(1);
+                                }
+                                return formatPhoneNumber(cleaned);
+                            });
+                            buyer[fieldKey] = parts.filter(p => p).join(', ');
+                        } else if (fieldKey === 'lastContactDate') {
+                            let dateStr = String(val).trim();
+                            if (typeof val === 'number') {
+                                // Excel Serial Date Conversion (offset 25569 for 1970)
+                                const utcMs = Math.round((val - 25569) * 86400 * 1000);
+                                const date = new Date(utcMs);
+                                if (!isNaN(date.getTime())) {
+                                    const m = date.getUTCMonth() + 1;
+                                    const d = date.getUTCDate().toString().padStart(2, '0');
+                                    const y = date.getUTCFullYear();
+                                    dateStr = `${m}/${d}/${y}`;
+                                }
+                            } else {
+                                // Standard Date String Parsing
+                                const date = new Date(dateStr);
+                                if (!isNaN(date.getTime())) {
+                                    const m = date.getMonth() + 1;
+                                    const d = date.getDate().toString().padStart(2, '0');
+                                    const y = date.getFullYear();
+                                    dateStr = `${m}/${d}/${y}`;
+                                }
+                            }
+                            buyer[fieldKey] = dateStr;
+                        } else {
+                            // Standard fields
+                            const fieldDef = FIELD_DEFINITIONS.find(f => f.key === fieldKey);
+                            if (fieldDef?.type === 'number') {
+                                if (typeof val === 'string') {
+                                    buyer[fieldKey] = parseNumberFromCurrency(val);
+                                } else {
+                                    buyer[fieldKey] = Number(val) || 0;
+                                }
+                            } else {
+                                let strVal = String(val).trim();
+                                if (fieldKey === 'name') {
+                                    // Capitalize first letter of each word (Title Case)
+                                    strVal = strVal.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+                                }
+                                buyer[fieldKey] = strVal;
+                            }
+                        }
+                    }
+                });
+
+                // Set defaults/fallbacks
+                if (!buyer.name) buyer.name = 'Unknown Name';
+                
+                return buyer as Buyer;
+            });
+
+            onImport(newBuyers, overwrite);
+        }, 500);
+    };
+
+    if (step === 'analyzing') {
+        return (
+            <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
+                <div className="bg-white dark:bg-gray-900 rounded-xl p-8 flex flex-col items-center">
+                    <Loader2 className="w-8 h-8 text-blue-500 animate-spin mb-4" />
+                    <p className="text-gray-900 dark:text-white">Analyzing file structure...</p>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-4xl border border-gray-200 dark:border-gray-700 shadow-2xl flex flex-col max-h-[90vh]">
+                <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center shrink-0">
+                    <div>
+                        <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                            <FileSpreadsheet className="text-purple-600 dark:text-purple-500" /> 
+                            Import Buyers
+                        </h2>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                            Map columns from <span className="text-gray-900 dark:text-white font-mono">{file.name}</span> to DealDesk fields.
+                        </p>
+                    </div>
+                    <button onClick={onClose} className="text-gray-400 hover:text-gray-900 dark:hover:text-white"><X size={24}/></button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-6 bg-white dark:bg-gray-900">
+                    <div className="space-y-6">
+                        {/* Mapping Grid */}
+                        <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                            <div className="grid grid-cols-12 gap-4 p-3 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 text-xs font-bold text-gray-500 uppercase tracking-wider">
+                                <div className="col-span-5">File Header</div>
+                                <div className="col-span-2 text-center flex justify-center"><ArrowRight size={14}/></div>
+                                <div className="col-span-5">DealDesk Field</div>
+                            </div>
+                            
+                            {headers.map((header, idx) => {
+                                const isMapped = !!mapping[idx.toString()];
+                                return (
+                                    <div key={idx} className={`grid grid-cols-12 gap-4 p-3 items-center border-b border-gray-100 dark:border-gray-700/50 last:border-0 ${isMapped ? 'bg-blue-50 dark:bg-blue-900/10' : ''}`}>
+                                        <div className="col-span-5">
+                                            <div className="font-medium text-gray-900 dark:text-white truncate" title={header}>{header}</div>
+                                            <div className="text-[10px] text-gray-500 truncate mt-0.5">Example: {rawData[0]?.[idx] || '(Empty)'}</div>
+                                        </div>
+                                        <div className="col-span-2 flex justify-center text-gray-600">
+                                            {isMapped ? <Check size={16} className="text-green-600 dark:text-green-500"/> : <ArrowRight size={16}/>}
+                                        </div>
+                                        <div className="col-span-5">
+                                            <select 
+                                                className={`w-full bg-white dark:bg-gray-900 border rounded p-2 text-sm outline-none transition-colors ${isMapped ? 'border-blue-500/50 text-blue-600 dark:text-blue-300' : 'border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400'}`}
+                                                value={mapping[idx.toString()] || ''}
+                                                onChange={(e) => handleMappingChange(idx.toString(), e.target.value)}
+                                            >
+                                                <option value="">(Skip Column)</option>
+                                                {FIELD_DEFINITIONS.map(field => (
+                                                    <option key={field.key} value={field.key}>{field.label}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        
+                        <div className="flex flex-col md:flex-row gap-4">
+                            <div className="flex-1 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-900/50 p-4 rounded-lg flex items-start gap-3">
+                                <AlertCircle className="text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" size={18} />
+                                <div>
+                                    <h4 className="text-sm font-bold text-blue-600 dark:text-blue-400">Smart Mapping Active</h4>
+                                    <p className="text-xs text-blue-800 dark:text-blue-200 mt-1">
+                                        We've automatically matched {Object.keys(mapping).length} columns based on your file headers.
+                                    </p>
+                                </div>
+                            </div>
+
+                             <div className="flex-1 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-900/50 p-4 rounded-lg">
+                                <h4 className="text-sm font-bold text-yellow-700 dark:text-yellow-400 mb-2">Duplicate Resolution</h4>
+                                <label className="flex items-start gap-2 cursor-pointer group">
+                                    <div className="relative flex items-center">
+                                        <input 
+                                            type="checkbox" 
+                                            className="peer sr-only"
+                                            checked={overwrite} 
+                                            onChange={e => setOverwrite(e.target.checked)}
+                                        />
+                                        <div className="w-5 h-5 border-2 border-gray-400 dark:border-gray-500 rounded peer-checked:bg-yellow-600 peer-checked:border-yellow-600 transition-colors"></div>
+                                        <Check className="w-3.5 h-3.5 text-white absolute left-0.5 top-0.5 opacity-0 peer-checked:opacity-100 transition-opacity" />
+                                    </div>
+                                    <span className="text-xs text-gray-700 dark:text-gray-300 pt-0.5">
+                                        Overwrite existing data in original record if duplicate is found. <br/>
+                                        <span className="text-gray-500 dark:text-gray-400 font-normal">If unchecked, we only fill in missing fields.</span>
+                                    </span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex justify-end gap-3 shrink-0">
+                    <button onClick={onClose} className="px-4 py-2 rounded text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white text-sm font-medium">Cancel</button>
+                    <button 
+                        onClick={processImport} 
+                        disabled={importing || Object.keys(mapping).length === 0}
+                        className="bg-green-600 hover:bg-green-500 text-white px-8 py-2 rounded-lg font-bold flex items-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {importing ? <Loader2 className="animate-spin" size={18}/> : <Save size={18} />}
+                        Import {rawData.length} Buyers
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
