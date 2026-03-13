@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 
 interface UseAutoSaveProps {
@@ -9,10 +9,16 @@ export const useAutoSave = ({ onSave }: UseAutoSaveProps) => {
     const [showSavedNotification, setShowSavedNotification] = useState(false);
     const [showErrorNotification, setShowErrorNotification] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const isSavingRef = useRef(false);
+    const isDirtyRef = useRef(false);
 
     const triggerSave = useCallback(async () => {
-        if (isSaving) return; // Prevent double submission
+        if (isSavingRef.current) {
+            isDirtyRef.current = true; // Queue the save
+            return;
+        }
         
+        isSavingRef.current = true;
         setIsSaving(true);
         setShowSavedNotification(false);
         setShowErrorNotification(false);
@@ -26,9 +32,16 @@ export const useAutoSave = ({ onSave }: UseAutoSaveProps) => {
             setShowErrorNotification(true);
             setTimeout(() => setShowErrorNotification(false), 4000);
         } finally {
+            isSavingRef.current = false;
             setIsSaving(false);
+            
+            // If another save was requested while we were saving, fire it now
+            if (isDirtyRef.current) {
+                isDirtyRef.current = false;
+                triggerSave();
+            }
         }
-    }, [onSave, isSaving]);
+    }, [onSave]);
 
     const handleAutoSave = useCallback(() => {
         triggerSave();
