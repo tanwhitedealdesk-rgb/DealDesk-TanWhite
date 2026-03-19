@@ -97,10 +97,12 @@ export const sendBulkEmailGAS = async (recipients: any[], subject: string, body:
         method: 'POST',
         body: JSON.stringify({
             action: 'send_bulk_email',
-            recipients: recipients,
-            subject: subject,
-            body: body,
-            from: fromAddress
+            data: {
+                recipients: recipients,
+                subject: subject,
+                body: body,
+                fromAddress: fromAddress
+            }
         })
     });
     

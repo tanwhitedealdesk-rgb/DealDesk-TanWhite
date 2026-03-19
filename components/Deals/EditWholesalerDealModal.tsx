@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Home, PhoneOutgoing, DollarSign, User, Clock, ArrowRight, Save, X, Activity, Briefcase, Calendar, MapPin, FileText, TrendingUp, AlertTriangle, CheckCircle, Search, Phone, Mail, Send, Copy, Plus, ChevronLeft, ChevronRight, TrendingDown, Loader2, LayoutGrid, Image as ImageIcon, Link as LinkIcon, Users, Pencil, Trash2, ArrowRightLeft } from 'lucide-react';
-import { api } from '../../services/api';
+import { api, sendBulkEmailGAS } from '../../services/api';
 import { Deal, Wholesaler, Brokerage, Comparable, User as UserType, Buyer } from '../../types';
 import { formatNumberWithCommas, parseNumberFromCurrency, formatPhoneNumber, getLogTimestamp, formatCurrency, calculateDaysRemaining, serverFunctions, processPhotoUrl, loadGoogleMapsScript } from '../../services/utils';
 import { ModalFooter, NavigationArrows, UnsavedChangesModal } from '../Shared/ModalComponents';
@@ -145,7 +145,7 @@ const WholesalerSlot: React.FC<{
                                     onClick={() => onGenerateEmail(agent)}
                                     className="bg-blue-600 hover:bg-blue-500 text-white text-xs px-3 py-2 rounded flex items-center gap-2 transition-colors font-bold shadow-sm w-full md:w-auto justify-center"
                                 >
-                                    <Send size={12} /> Generate Offer Email
+                                    <Send size={12} /> Send LOI
                                 </button>
                             </div>
                         )}
@@ -453,6 +453,7 @@ export const EditWholesalerDealModal: React.FC<EditWholesalerDealModalProps> = (
     const [showEmailModal, setShowEmailModal] = useState(false);
     const [emailContent, setEmailContent] = useState("");
     const [emailSubject, setEmailSubject] = useState("");
+    const [isSendingEmail, setIsSendingEmail] = useState(false);
 
     const wholesaler1 = wholesalers.find(a => a.name.toLowerCase() === (deal.agentName || '').toLowerCase());
     const wholesaler2 = wholesalers.find(a => a.id === deal.secondAgentId);
@@ -536,9 +537,26 @@ Phone: (636) 486-6088`;
         setShowEmailModal(true);
     };
 
-    const copyToClipboard = () => {
-        navigator.clipboard.writeText(`${emailSubject}\n\n${emailContent}`);
-        alert("Email copied to clipboard!");
+    const handleSendLOI = async () => {
+        if (!deal.agentEmail) {
+            alert("This wholesaler does not have an email address set.");
+            return;
+        }
+        setIsSendingEmail(true);
+        try {
+            const htmlBody = emailContent.replace(/\n/g, '<br/>');
+            const response = await sendBulkEmailGAS([deal.agentEmail], emailSubject, htmlBody);
+            if (response && response.status === 'success') {
+                alert("LOI sent successfully!");
+                setShowEmailModal(false);
+            } else {
+                alert("Failed to send LOI. " + (response?.error || response?.message || "Unknown error"));
+            }
+        } catch (e: any) {
+            alert("Error sending LOI: " + e.message);
+        } finally {
+            setIsSendingEmail(false);
+        }
     };
 
     const updateComp = (key: 'comparable1' | 'comparable2' | 'comparable3', field: keyof Comparable, value: any) => {
@@ -1324,7 +1342,7 @@ Phone: (636) 486-6088`;
             <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={(e) => e.stopPropagation()}>
                 <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl max-w-2xl w-full flex flex-col max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
                     <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex justify-between items-center">
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">Generate Offer Email</h3>
+                        <h3 className="text-lg font-bold text-gray-900 dark:text-white">Send LOI</h3>
                         <button onClick={() => setShowEmailModal(false)} className="text-gray-400 hover:text-gray-900 dark:hover:text-white"><X size={20}/></button>
                     </div>
                     <div className="p-6 flex-1 overflow-y-auto space-y-4">
@@ -1347,7 +1365,14 @@ Phone: (636) 486-6088`;
                     </div>
                     <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
                         <button onClick={() => setShowEmailModal(false)} className="px-4 py-2 rounded text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white text-sm">Close</button>
-                        <button onClick={copyToClipboard} className="bg-blue-600 hover:bg-blue-50 text-white px-6 py-2 rounded font-bold flex items-center gap-2 shadow-lg"><Copy size={16}/> Copy to Clipboard</button>
+                        <button 
+                            onClick={handleSendLOI} 
+                            disabled={isSendingEmail}
+                            className="bg-blue-600 hover:bg-blue-50 text-white px-6 py-2 rounded font-bold flex items-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {isSendingEmail ? <Loader2 size={16} className="animate-spin" /> : <Send size={16}/>} 
+                            {isSendingEmail ? 'Sending...' : 'Send LOI'}
+                        </button>
                     </div>
                 </div>
             </div>
