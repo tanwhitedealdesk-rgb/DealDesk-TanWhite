@@ -37,10 +37,11 @@ const processIncomingItem = (item: any, tableName: string) => {
         processed.createdAt = processed.created_at;
     }
     
-    if (tableName === 'Deals') {
+    if (tableName === 'Deals' || tableName === 'JVDeals') {
         processed.photos = cleanArrayField(processed.photos, false).filter(Boolean);
         processed.dealType = Array.from(new Set(cleanArrayField(processed.dealType, true))).filter(Boolean);
         processed.logs = cleanArrayField(processed.logs, false).filter(Boolean);
+        processed.pipelineType = tableName === 'JVDeals' ? 'jv' : 'main';
     }
 
     if (tableName === 'Wholesalers') {
@@ -149,7 +150,7 @@ export const api = {
         
         const { data, error } = await supabase.from(table).upsert(payload).select().single();
         if (error) {
-            console.error(`Error saving to ${table}:`, error);
+            console.error(`Error saving to ${table}:`, JSON.stringify(error, null, 2));
             return null;
         }
         return processIncomingItem(data, table);

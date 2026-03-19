@@ -15,6 +15,7 @@ import { WholesalerCard } from './components/Wholesalers/WholesalerCard';
 import { WholesalersView } from './components/Wholesalers/WholesalersView';
 import { ContactsManager } from './components/Contacts/ContactsManager'; 
 import { EditDealModal } from './components/Deals/EditDealModal';
+import { EditWholesalerDealModal } from './components/Deals/EditWholesalerDealModal';
 import { AgentProfileModal } from './components/Agents/AgentProfileModal';
 import { EditBuyerModal } from './components/Buyers/EditBuyerModal'; 
 import { EditWholesalerModal } from './components/Wholesalers/EditWholesalerModal';
@@ -36,7 +37,7 @@ import { MessageCenter } from './components/MessageCenter/MessageCenter';
 import { mockAcquisitionsMessages, mockDispositionsMessages } from './services/mockData';
 import { generateId, getLogTimestamp, loadGoogleMapsScript, formatCurrency, formatPhoneNumber, parseNumberFromCurrency, fetchAgentPhotoFromGAMLS, fetchAgentDetailsFromGAMLS, captureStreetViewAsBase64 } from './services/utils';
 import { User as UserType, Deal, Agent, Brokerage, FilterConfig, CalcData, Buyer, BuyBox, Wholesaler, Contact, EmailList } from './types';
-import { POTENTIAL_STATUSES, UNDER_CONTRACT_STATUSES, DECLINED_STATUSES, CLOSED_STATUSES, GOOGLE_MAPS_API_KEY, GOOGLE_SCRIPT_URL, COUNTER_STATUSES, SUB_MARKETS, COUNTIES, BUYER_STATUS_TABS, AGENT_STATUS_TABS, WHOLESALER_STATUS_TABS, OFFER_DECISIONS } from './constants';
+import { POTENTIAL_STATUSES, UNDER_CONTRACT_STATUSES, DECLINED_STATUSES, CLOSED_STATUSES, GOOGLE_MAPS_API_KEY, GOOGLE_SCRIPT_URL, COUNTER_STATUSES, SUB_MARKETS, COUNTIES, BUYER_STATUS_TABS, AGENT_STATUS_TABS, WHOLESALER_STATUS_TABS, OFFER_DECISIONS, JV_PIPELINE_STATUSES } from './constants';
 
 export default function App() {
   const location = useLocation();
@@ -228,8 +229,10 @@ export default function App() {
   const [importAgentFile, setImportAgentFile] = useState<File | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [agentSuggestions, setAgentSuggestions] = useState<Agent[]>([]);
+  const [wholesalerSuggestions, setWholesalerSuggestions] = useState<Wholesaler[]>([]);
   const [brokerageSuggestions, setBrokerageSuggestions] = useState<Brokerage[]>([]);
   const [showAgentSuggestions, setShowAgentSuggestions] = useState(false);
+  const [showWholesalerSuggestions, setShowWholesalerSuggestions] = useState(false);
   const [showBrokerageSuggestions, setShowBrokerageSuggestions] = useState(false);
   const [calcData, setCalcData] = useState<CalcData>({ arv: 250000, repairs: 30000, fee: 10000, isDoubleClose: false });
   const [mao, setMao] = useState(0);
@@ -246,7 +249,9 @@ export default function App() {
       setIsLoading(true);
       try {
         const dealsData = await api.load('Deals');
-        const cleanDeals = dealsData.map((d: any) => ({
+        const jvDealsData = await api.load('JVDeals');
+        const allDealsData = [...dealsData, ...jvDealsData];
+        const cleanDeals = allDealsData.map((d: any) => ({
             ...d,
             logs: Array.isArray(d.logs) ? d.logs : [],
             dealType: Array.isArray(d.dealType) ? d.dealType : [],
@@ -349,6 +354,16 @@ export default function App() {
           const newBrokerage: Brokerage = { id: generateId(), name: name, phone: phone || '', email: email || '', createdAt: getLogTimestamp() };
           await api.save(newBrokerage, 'Brokerages');
           setBrokerages(prev => [...prev, newBrokerage]);
+          
+          activityLogService.logActivity(
+              currentUser,
+              'CREATE',
+              'BROKERAGE',
+              newBrokerage.id,
+              `Created brokerage: ${newBrokerage.name}`,
+              {},
+              newBrokerage.name
+          );
       }
   };
 
@@ -371,6 +386,17 @@ export default function App() {
           const savedAgent = await api.save(newAgent, 'Agents'); 
           if(savedAgent) {
               setAgents(prev => [...prev, savedAgent]);
+              
+              activityLogService.logActivity(
+                  currentUser,
+                  'CREATE',
+                  'AGENT',
+                  savedAgent.id,
+                  `Created agent: ${savedAgent.name} from deal ${deal.address}`,
+                  {},
+                  savedAgent.name
+              );
+              
               if (savedAgent.name) {
                   try {
                       const photoUrl = await fetchAgentPhotoFromGAMLS(savedAgent.name, savedAgent.phone);
@@ -394,6 +420,16 @@ export default function App() {
           const saved = await api.save(updatedAgent, 'Agents');
           if(saved) {
               setAgents(prev => prev.map(a => a.id === saved.id ? saved : a));
+              
+              activityLogService.logActivity(
+                  currentUser,
+                  'UPDATE',
+                  'AGENT',
+                  saved.id,
+                  `Updated agent: ${saved.name} from deal ${deal.address}`,
+                  {},
+                  saved.name
+              );
           }
       }
   };
@@ -418,7 +454,8 @@ export default function App() {
               'AGENT', 
               saved.id, 
               agent ? `Updated agent: ${saved.name}` : `Created agent: ${saved.name}`, 
-              updates
+              updates,
+              saved.name
           );
       }
   };
@@ -431,6 +468,24 @@ export default function App() {
       if (saved) {
           setWholesalers(prev => prev.map(w => w.id === wholesalerId ? saved : w));
           if (editingWholesaler && editingWholesaler.id === wholesalerId) setEditingWholesaler(saved);
+          
+          let actionType = 'UPDATE';
+          let description = `Updated wholesaler: ${saved.name}`;
+          
+          if (updates.notes) {
+              actionType = 'NOTE_ADDED';
+              description = `Added a note to wholesaler ${saved.name}`;
+          }
+          
+          activityLogService.logActivity(
+              currentUser,
+              actionType,
+              'WHOLESALER',
+              wholesalerId,
+              description,
+              updates,
+              saved.name
+          );
       }
   };
 
@@ -441,6 +496,24 @@ export default function App() {
       const saved = await api.save(merged, 'Buyers');
       if (saved) {
           setBuyers(prev => prev.map(b => b.id === buyerId ? saved : b));
+          
+          let actionType = 'UPDATE';
+          let description = `Updated buyer: ${saved.name}`;
+          
+          if (updates.notes) {
+              actionType = 'NOTE_ADDED';
+              description = `Added a note to buyer ${saved.name}`;
+          }
+          
+          activityLogService.logActivity(
+              currentUser,
+              actionType,
+              'BUYER',
+              buyerId,
+              description,
+              updates,
+              saved.name
+          );
       }
   };
 
@@ -482,7 +555,9 @@ export default function App() {
               isNew ? 'CREATE' : 'UPDATE', 
               'BUYER', 
               saved.id, 
-              `${isNew ? 'Added' : 'Updated'} buyer: ${saved.name}`
+              `${isNew ? 'Added' : 'Updated'} buyer: ${saved.name}`,
+              {},
+              saved.name
           );
 
           if (shouldClose) { setEditingBuyer(null); setShowAddBuyerModal(false); }
@@ -493,8 +568,22 @@ export default function App() {
   };
 
   const handleDeleteBuyer = async (id: string) => { 
+      const buyerToDelete = buyers.find(b => b.id === id);
       const success = await api.delete(id, 'Buyers');
-      if (success) setBuyers(prev => prev.filter(b => b.id !== id)); 
+      if (success) {
+          setBuyers(prev => prev.filter(b => b.id !== id)); 
+          if (buyerToDelete) {
+              activityLogService.logActivity(
+                  currentUser,
+                  'DELETE',
+                  'BUYER',
+                  id,
+                  `Deleted buyer: ${buyerToDelete.name}`,
+                  {},
+                  buyerToDelete.name
+              );
+          }
+      }
   };
 
   const handleAddBuyer = () => {
@@ -561,7 +650,9 @@ export default function App() {
               isNew ? 'CREATE' : 'UPDATE', 
               'WHOLESALER', 
               saved.id, 
-              `${isNew ? 'Added' : 'Updated'} wholesaler: ${saved.name}`
+              `${isNew ? 'Added' : 'Updated'} wholesaler: ${saved.name}`,
+              {},
+              saved.name
           );
 
           if (shouldClose) { 
@@ -576,18 +667,57 @@ export default function App() {
   };
 
   const handleDeleteWholesaler = async (id: string) => { 
+      const wholesalerToDelete = wholesalers.find(w => w.id === id);
       const success = await api.delete(id, 'Wholesalers');
-      if(success) setWholesalers(prev => prev.filter(w => w.id !== id)); 
+      if(success) {
+          setWholesalers(prev => prev.filter(w => w.id !== id)); 
+          if (wholesalerToDelete) {
+              activityLogService.logActivity(
+                  currentUser,
+                  'DELETE',
+                  'WHOLESALER',
+                  id,
+                  `Deleted wholesaler: ${wholesalerToDelete.name}`,
+                  {},
+                  wholesalerToDelete.name
+              );
+          }
+      }
   };
 
   const handleCreateEmailList = async (list: EmailList) => {
       const saved = await api.save(list, 'EmailLists');
-      if(saved) setEmailLists(prev => [...prev, saved]);
+      if(saved) {
+          setEmailLists(prev => [...prev, saved]);
+          activityLogService.logActivity(
+              currentUser,
+              'CREATE',
+              'EMAIL_LIST',
+              saved.id,
+              `Created email list: ${saved.name}`,
+              {},
+              saved.name
+          );
+      }
   };
 
   const handleDeleteEmailList = async (id: string) => {
+      const listToDelete = emailLists.find(l => l.id === id);
       const success = await api.delete(id, 'EmailLists');
-      if(success) setEmailLists(prev => prev.filter(l => l.id !== id));
+      if(success) {
+          setEmailLists(prev => prev.filter(l => l.id !== id));
+          if (listToDelete) {
+              activityLogService.logActivity(
+                  currentUser,
+                  'DELETE',
+                  'EMAIL_LIST',
+                  id,
+                  `Deleted email list: ${listToDelete.name}`,
+                  {},
+                  listToDelete.name
+              );
+          }
+      }
   };
 
   const handleMoveBuyerToAgent = async (buyer: Buyer) => {
@@ -604,6 +734,17 @@ export default function App() {
       if (saved) {
           setAgents(prev => [...prev, saved]);
           await handleDeleteBuyer(buyer.id);
+          
+          activityLogService.logActivity(
+              currentUser,
+              'CREATE',
+              'AGENT',
+              saved.id,
+              `Moved buyer ${buyer.name} to agents`,
+              {},
+              saved.name
+          );
+          
           setEditingBuyer(null);
           setShowAddBuyerModal(false);
           navigate('/agents');
@@ -630,6 +771,17 @@ export default function App() {
       if (saved) {
           setWholesalers(prev => [...prev, saved]);
           await handleDeleteBuyer(buyer.id);
+          
+          activityLogService.logActivity(
+              currentUser,
+              'CREATE',
+              'WHOLESALER',
+              saved.id,
+              `Moved buyer ${buyer.name} to wholesalers`,
+              {},
+              saved.name
+          );
+          
           setEditingBuyer(null);
           setShowAddBuyerModal(false);
           navigate('/wholesalers');
@@ -660,6 +812,17 @@ export default function App() {
           setBuyers(prev => [...prev, saved]);
           setAgents(prev => prev.filter(a => a.id !== agent.id));
           await api.delete(agent.id, 'Agents');
+          
+          activityLogService.logActivity(
+              currentUser,
+              'CREATE',
+              'BUYER',
+              saved.id,
+              `Moved agent ${agent.name} to buyers`,
+              {},
+              saved.name
+          );
+          
           setViewingAgent(null);
           setEditingAgent(null);
           navigate('/buyers');
@@ -687,6 +850,17 @@ export default function App() {
           setWholesalers(prev => [...prev, saved]);
           setAgents(prev => prev.filter(a => a.id !== agent.id));
           await api.delete(agent.id, 'Agents');
+          
+          activityLogService.logActivity(
+              currentUser,
+              'CREATE',
+              'WHOLESALER',
+              saved.id,
+              `Moved agent ${agent.name} to wholesalers`,
+              {},
+              saved.name
+          );
+          
           setViewingAgent(null);
           setEditingAgent(null);
           navigate('/wholesalers');
@@ -716,6 +890,17 @@ export default function App() {
       if(saved) {
           setBuyers(prev => [...prev, saved]);
           await handleDeleteWholesaler(wholesaler.id);
+          
+          activityLogService.logActivity(
+              currentUser,
+              'CREATE',
+              'BUYER',
+              saved.id,
+              `Moved wholesaler ${wholesaler.name} to buyers`,
+              {},
+              saved.name
+          );
+          
           setEditingWholesaler(null);
           setShowAddWholesalerModal(false);
           navigate('/buyers');
@@ -740,6 +925,17 @@ export default function App() {
       if(saved) {
           setAgents(prev => [...prev, saved]);
           await handleDeleteWholesaler(wholesaler.id);
+          
+          activityLogService.logActivity(
+              currentUser,
+              'CREATE',
+              'AGENT',
+              saved.id,
+              `Moved wholesaler ${wholesaler.name} to agents`,
+              {},
+              saved.name
+          );
+          
           setEditingWholesaler(null);
           setShowAddWholesalerModal(false);
           navigate('/agents');
@@ -767,27 +963,46 @@ export default function App() {
   };
 
   const handleAgentLookup = (val: string) => { const query = val.toLowerCase(); const filtered = agents.filter(a => a.name.toLowerCase().includes(query)); setAgentSuggestions(filtered); setShowAgentSuggestions(true); };
+  const handleWholesalerLookup = (val: string) => { const query = val.toLowerCase(); const filtered = wholesalers.filter(a => a.name.toLowerCase().includes(query)); setWholesalerSuggestions(filtered); setShowWholesalerSuggestions(true); };
   const handleBrokerageLookup = (val: string) => { const query = val.toLowerCase(); const filtered = brokerages.filter(b => b.name.toLowerCase().includes(query)); setBrokerageSuggestions(filtered); setShowBrokerageSuggestions(true); };
   const selectAgent = (agent: Agent) => { if (editingDeal) setEditingDeal({ ...editingDeal, agentName: agent.name, agentPhone: agent.phone, agentEmail: agent.email, agentBrokerage: agent.brokerage }); setShowAgentSuggestions(false); };
+  const selectWholesaler = (wholesaler: Wholesaler) => { if (editingDeal) setEditingDeal({ ...editingDeal, agentName: wholesaler.name, agentPhone: wholesaler.phone, agentEmail: wholesaler.email, agentBrokerage: wholesaler.companyName }); setShowWholesalerSuggestions(false); };
   const selectBrokerage = (brokerage: Brokerage) => { if (editingDeal) setEditingDeal({ ...editingDeal, agentBrokerage: brokerage.name }); setShowBrokerageSuggestions(false); };
   
   const updateDeal = useCallback(async (id: string, updates: Partial<Deal>) => {
     let currentItem = deals.find(d => d.id === id);
     if (!currentItem) return;
-    const saved = await api.save({ ...currentItem, ...updates }, 'Deals');
+    const tableName = currentItem.pipelineType === 'jv' ? 'JVDeals' : 'Deals';
+    const saved = await api.save({ ...currentItem, ...updates }, tableName);
     if (saved) {
         setDeals(prev => prev.map(d => d.id === id ? saved : d));
         setEditingDeal(prev => prev && prev.id === id ? saved : prev);
         if (saved.agentName) checkAndSaveAgent(saved);
         
+        // Determine action type based on updates
+        let actionType = 'UPDATE';
+        let description = `Updated deal: ${saved.address}`;
+        
+        if (updates.logs && currentItem.logs && updates.logs.length > currentItem.logs.length) {
+            actionType = 'NOTE_ADDED';
+            description = `Added a note to ${saved.address}`;
+        } else if (updates.offerDecision && updates.offerDecision !== currentItem.offerDecision) {
+            actionType = 'STATUS_CHANGE';
+            description = `Changed pipeline status to ${updates.offerDecision} on ${saved.address}`;
+        } else if (updates.contactStatus && updates.contactStatus !== currentItem.contactStatus) {
+            actionType = 'STATUS_CHANGE';
+            description = `Changed contact status to ${updates.contactStatus} on ${saved.address}`;
+        }
+
         // Log Activity
         activityLogService.logActivity(
             currentUser, 
-            'UPDATE', 
+            actionType, 
             'DEAL', 
             saved.id, 
-            `Updated deal: ${saved.address}`, 
-            updates
+            description, 
+            updates,
+            saved.address
         );
     }
   }, [deals, agents]);
@@ -907,9 +1122,14 @@ export default function App() {
         negotiatedAskingPrice: parseNumberFromCurrency(dataToSave.negotiatedAskingPrice), 
         desiredWholesaleProfit: parseNumberFromCurrency(dataToSave.desiredWholesaleProfit) 
     };
+    
+    // Find original deal for diffing
+    const originalDeal = deals.find(d => d.id === updatedDeal.id);
+    
     // RESTORED: Fields are now saved to DB correctly based on user feedback
     try {
-        const saved = await api.save(updatedDeal, 'Deals');
+        const tableName = updatedDeal.pipelineType === 'jv' ? 'JVDeals' : 'Deals';
+        const saved = await api.save(updatedDeal, tableName);
         if (saved) {
             setDeals(prev => {
                 const exists = prev.some(d => d.id === saved.id);
@@ -918,6 +1138,51 @@ export default function App() {
             });
             checkAndSaveAgent(saved);
             localStorage.setItem('azre-editing-deal-id', saved.id);
+            
+            // State Diffing for Activity Logs
+            if (originalDeal) {
+                const changedFields: Record<string, any> = {};
+                
+                // Generic diffing for all fields
+                const ignoreKeys = ['id', 'createdAt'];
+                Object.keys(updatedDeal).forEach(key => {
+                    if (!ignoreKeys.includes(key)) {
+                        const oldVal = (originalDeal as any)[key];
+                        const newVal = (updatedDeal as any)[key];
+                        if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+                            changedFields[key] = { from: oldVal, to: newVal };
+                        }
+                    }
+                });
+
+                if (Object.keys(changedFields).length > 0) {
+                    let actionType = 'UPDATE';
+                    let description = `Updated deal: ${saved.address}`;
+
+                    // Check for specific critical changes to override generic UPDATE
+                    if (changedFields['offerDecision']) {
+                        actionType = 'STATUS_CHANGE';
+                        description = `Changed pipeline status to ${updatedDeal.offerDecision} on ${saved.address}`;
+                    } else if (changedFields['contactStatus']) {
+                        actionType = 'STATUS_CHANGE';
+                        description = `Changed contact status to ${updatedDeal.contactStatus} on ${saved.address}`;
+                    } else if (changedFields['logs'] && updatedDeal.logs && originalDeal.logs && updatedDeal.logs.length > originalDeal.logs.length) {
+                        actionType = 'NOTE_ADDED';
+                        description = `Added a note to ${saved.address}`;
+                    }
+
+                    activityLogService.logActivity(
+                        currentUser, 
+                        actionType, 
+                        'DEAL', 
+                        saved.id, 
+                        description, 
+                        changedFields,
+                        saved.address
+                    );
+                }
+            }
+
             if (shouldClose) { 
                 setEditingDeal(null); 
                 localStorage.removeItem('azre-editing-deal-id'); 
@@ -940,13 +1205,24 @@ export default function App() {
         alert("An error occurred while saving.");
     }
     return null;
-  }, [editingDeal]);
+  }, [editingDeal, deals]);
 
   const handleCloseEditModal = async () => { 
     if (editingDeal) {
         if (!editingDeal.address || editingDeal.address.trim() === '') {
             setDeals(prev => prev.filter(d => d.id !== editingDeal.id));
-            await api.delete(editingDeal.id, 'Deals');
+            const tableName = editingDeal.pipelineType === 'jv' ? 'JVDeals' : 'Deals';
+            await api.delete(editingDeal.id, tableName);
+            
+            activityLogService.logActivity(
+                currentUser,
+                'DELETE',
+                'DEAL',
+                editingDeal.id,
+                `Deleted draft property`,
+                {},
+                'Draft Property'
+            );
         }
     }
     setEditingDeal(null); 
@@ -954,9 +1230,32 @@ export default function App() {
     setDealModalZIndex('z-[120]'); 
   };
   
+  const handleDeleteDeal = async (id: string) => {
+      const dealToDelete = deals.find(d => d.id === id);
+      if (!dealToDelete) return;
+      const tableName = dealToDelete.pipelineType === 'jv' ? 'JVDeals' : 'Deals';
+      const success = await api.delete(id, tableName);
+      if (success) {
+          setDeals(prev => prev.filter(d => d.id !== id));
+          if (dealToDelete) {
+              activityLogService.logActivity(
+                  currentUser,
+                  'DELETE',
+                  'DEAL',
+                  id,
+                  `Deleted property: ${dealToDelete.address}`,
+                  {},
+                  dealToDelete.address
+              );
+          }
+      }
+  };
+
   const handleAddDeal = async () => {
+      const isJv = location.pathname === '/jv-pipeline';
       const newDealInit: Deal = {
           id: generateId(), 
+          pipelineType: isJv ? 'jv' : 'main',
           createdAt: new Date().toISOString(),
           address: '',
           mls: '',
@@ -968,7 +1267,7 @@ export default function App() {
           agentBrokerage: '',
           acquisitionManager: currentUser?.name || '',
           status: 'Analyzing',
-          offerDecision: 'No Offer Made Yet',
+          offerDecision: isJv ? 'Available' : 'No Offer Made Yet',
           subMarket: '',
           dealType: [],
           interestLevel: '',
@@ -984,8 +1283,8 @@ export default function App() {
           negotiatedAskingPrice: 0,
           desiredWholesaleProfit: 0,
           priceReductionAlert: '',
-          forSaleBy: 'Agent',
-          contactStatus: 'Agent Not Contacted Yet',
+          forSaleBy: isJv ? 'Wholesaler' : 'Agent',
+          contactStatus: isJv ? 'Have Not Spoken With Wholesaler' : 'Agent Not Contacted Yet',
           agentContacted: 'No', 
           propertyType: 'Single Family Residential',
           yearBuilt: undefined,
@@ -1005,14 +1304,28 @@ export default function App() {
           photos: []
       };
       try {
-        const savedRecord = await api.save(newDealInit, 'Deals');
+        const tableName = isJv ? 'JVDeals' : 'Deals';
+        const savedRecord = await api.save(newDealInit, tableName);
         if (savedRecord) {
             setDeals(prev => [savedRecord, ...prev]);
             setEditingDeal(savedRecord);
             setDealModalZIndex('z-[120]');
+            
+            // Log Activity
+            activityLogService.logActivity(
+                currentUser, 
+                'CREATE', 
+                'DEAL', 
+                savedRecord.id, 
+                `Added property: ${savedRecord.address || 'New Property'}`, 
+                {},
+                savedRecord.address || 'New Property'
+            );
+        } else {
+            alert("Failed to save deal. Check console for details.");
         }
-      } catch (e) {
-          alert("Network Error: Could not initialize new deal.");
+      } catch (e: any) {
+          alert("Network Error: Could not initialize new deal. " + e.message);
       }
   };
 
@@ -1058,14 +1371,30 @@ export default function App() {
   const handleSwitchToDeal = async (targetDeal: Deal) => {
     if (!editingDeal) return;
     const draftId = editingDeal.id;
+    const tableName = editingDeal.pipelineType === 'jv' ? 'JVDeals' : 'Deals';
     setDeals(prev => prev.filter(d => d.id !== draftId));
     setEditingDeal(targetDeal);
     localStorage.setItem('azre-editing-deal-id', targetDeal.id);
-    await api.delete(draftId, 'Deals');
+    await api.delete(draftId, tableName);
+    
+    activityLogService.logActivity(
+        currentUser,
+        'DELETE',
+        'DEAL',
+        draftId,
+        `Deleted draft property`,
+        {},
+        'Draft Property'
+    );
   };
 
   const getFilteredDeals = () => {
     let filtered = [...deals]; 
+    if (location.pathname === '/jv-pipeline') {
+        filtered = filtered.filter(d => d.pipelineType === 'jv');
+    } else if (location.pathname === '/pipeline') {
+        filtered = filtered.filter(d => d.pipelineType === 'main' || !d.pipelineType);
+    }
     const activeSearch = globalSearchQuery.trim() || pipelineSearch.trim();
     if (activeSearch) {
         const query = activeSearch.toLowerCase().trim();
@@ -1097,16 +1426,22 @@ export default function App() {
   };
   const filteredDeals = getFilteredDeals();
   const getOrderedDeals = () => {
-    if (location.pathname !== '/pipeline') return filteredDeals;
+    if (location.pathname !== '/pipeline' && location.pathname !== '/jv-pipeline') return filteredDeals;
     let statusesToShow: string[] = [];
-    if (filterConfig.type === 'Show Counter Offers Only') statusesToShow = COUNTER_STATUSES;
-    else if (pipelineStage === 'All Deals') statusesToShow = OFFER_DECISIONS;
-    else {
-        switch(pipelineStage) {
-            case 'Potential': statusesToShow = POTENTIAL_STATUSES; break;
-            case 'Under Contract': statusesToShow = UNDER_CONTRACT_STATUSES; break;
-            case 'Closed': statusesToShow = CLOSED_STATUSES; break;
-            case 'Declined': statusesToShow = DECLINED_STATUSES; break;
+    if (location.pathname === '/jv-pipeline') {
+        if (pipelineStage === 'All Deals') statusesToShow = JV_PIPELINE_STATUSES;
+        else if (pipelineStage === 'Available') statusesToShow = ['Available'];
+        else if (pipelineStage === 'No Longer Available') statusesToShow = ['No Longer Available'];
+    } else {
+        if (filterConfig.type === 'Show Counter Offers Only') statusesToShow = COUNTER_STATUSES;
+        else if (pipelineStage === 'All Deals') statusesToShow = OFFER_DECISIONS;
+        else {
+            switch(pipelineStage) {
+                case 'Potential': statusesToShow = POTENTIAL_STATUSES; break;
+                case 'Under Contract': statusesToShow = UNDER_CONTRACT_STATUSES; break;
+                case 'Closed': statusesToShow = CLOSED_STATUSES; break;
+                case 'Declined': statusesToShow = DECLINED_STATUSES; break;
+            }
         }
     }
     return filteredDeals.filter(d => statusesToShow.includes(d.offerDecision));
@@ -1251,12 +1586,14 @@ export default function App() {
                     buyers={buyers}
                     onEdit={(d) => { setDealModalZIndex('z-[120]'); setEditingDeal(d); }}
                     onUpdate={updateDeal}
-                    onDelete={async (id) => {const success = await api.delete(id, 'Deals'); if(success) setDeals(prev=>prev.filter(d=>d.id!==id));}}
+                    onDelete={handleDeleteDeal}
                     onMove={(id, dec) => updateDeal(id, {offerDecision: dec})}
                  />
                } />
                <Route path="/pipeline" element={
                  <PipelineView
+                    title="Main Pipeline"
+                    pipelineType="main"
                     deals={deals}
                     agents={agents}
                     pipelineSearch={pipelineSearch}
@@ -1275,12 +1612,40 @@ export default function App() {
                     setShowAgentFilterSuggestions={setShowAgentFilterSuggestions}
                     handleAddDeal={handleAddDeal}
                     updateDeal={updateDeal}
-                    setDeals={setDeals}
                     setDealModalZIndex={setDealModalZIndex}
                     setEditingDeal={setEditingDeal}
                     filteredDeals={filteredDeals}
                     orderedDeals={orderedDeals}
-                    api={api}
+                    handleDeleteDeal={handleDeleteDeal}
+                 />
+               } />
+               <Route path="/jv-pipeline" element={
+                 <PipelineView
+                    title="JV Pipeline"
+                    pipelineType="jv"
+                    deals={deals}
+                    agents={wholesalers as any}
+                    pipelineSearch={pipelineSearch}
+                    setPipelineSearch={setPipelineSearch}
+                    pipelineStage={pipelineStage}
+                    setPipelineStage={setPipelineStage}
+                    pipelineSort={pipelineSort}
+                    setPipelineSort={setPipelineSort}
+                    showFilterMenu={showFilterMenu}
+                    setShowFilterMenu={setShowFilterMenu}
+                    filterConfig={filterConfig}
+                    setFilterConfig={setFilterConfig}
+                    agentFilterSearch={agentFilterSearch}
+                    setAgentFilterSearch={setAgentFilterSearch}
+                    showAgentFilterSuggestions={showAgentFilterSuggestions}
+                    setShowAgentFilterSuggestions={setShowAgentFilterSuggestions}
+                    handleAddDeal={handleAddDeal}
+                    updateDeal={updateDeal}
+                    setDealModalZIndex={setDealModalZIndex}
+                    setEditingDeal={setEditingDeal}
+                    filteredDeals={filteredDeals}
+                    orderedDeals={orderedDeals}
+                    handleDeleteDeal={handleDeleteDeal}
                  />
                } />
                <Route path="/email" element={
@@ -1421,7 +1786,7 @@ export default function App() {
         </main>
       </div>
 
-      {importFile && (<ImportMapModal file={importFile} onClose={() => setImportFile(null)} onImport={async (d) => { const saved = await api.saveBatch(d,'Deals'); if(saved) setDeals(prev=>[...prev,...saved]); }} />)}
+      {importFile && (<ImportMapModal file={importFile} onClose={() => setImportFile(null)} onImport={async (d) => { const saved = await api.saveBatch(d,'Deals'); if(saved) { setDeals(prev=>[...prev,...saved]); activityLogService.logActivity(currentUser, 'CREATE', 'DEAL', 'batch', `Imported ${saved.length} properties`, {}, 'Batch Import'); } }} />)}
       {importBuyerFile && (<ImportBuyerMapModal file={importBuyerFile} onClose={() => setImportBuyerFile(null)} onImport={async (importedBuyers, overwrite) => {
           const saved = await api.saveBatch(importedBuyers, 'Buyers');
           if(saved) {
@@ -1430,10 +1795,11 @@ export default function App() {
                   const oldBuyers = prevBuyers.filter(b => !newIds.has(b.id));
                   return [...oldBuyers, ...saved];
               });
+              activityLogService.logActivity(currentUser, 'CREATE', 'BUYER', 'batch', `Imported ${saved.length} buyers`, {}, 'Batch Import');
           }
           setImportBuyerFile(null);
       }} />)}
-      {importAgentFile && (<ImportAgentMapModal file={importAgentFile} onClose={() => setImportAgentFile(null)} onImport={async (a) => { const saved = await api.saveBatch(a,'Agents'); if(saved) setAgents(prev=>[...prev,...saved]); }} />)}
+      {importAgentFile && (<ImportAgentMapModal file={importAgentFile} onClose={() => setImportAgentFile(null)} onImport={async (a) => { const saved = await api.saveBatch(a,'Agents'); if(saved) { setAgents(prev=>[...prev,...saved]); activityLogService.logActivity(currentUser, 'CREATE', 'AGENT', 'batch', `Imported ${saved.length} agents`, {}, 'Batch Import'); } }} />)}
       
 
       {showAddWholesalerModal && editingWholesaler && (<EditWholesalerModal wholesaler={editingWholesaler} onClose={() => { setShowAddWholesalerModal(false); setEditingWholesaler(null); }} onSave={handleSaveWholesaler} onDelete={handleDeleteWholesaler} currentUser={currentUser} deals={deals} onOpenDeal={(d) => { setEditingWholesaler(null); setShowAddWholesalerModal(false); setDealModalZIndex('z-[160]'); setEditingDeal(d); }} onNavigate={handleWholesalerNavigate} hasNext={sortedWholesalers.indexOf(editingWholesaler) < sortedWholesalers.length - 1} hasPrevious={sortedWholesalers.indexOf(editingWholesaler) > 0} onMoveToAgent={() => handleMoveWholesalerToAgent(editingWholesaler)} onMoveToBuyer={() => handleMoveWholesalerToBuyer(editingWholesaler)} />)}
@@ -1446,8 +1812,50 @@ export default function App() {
       <input type="file" id="import-agents" className="hidden" accept=".xlsx, .xls, .csv" onChange={handleAgentFileUpload} />
 
       {viewingAgent && (<AgentProfileModal agent={viewingAgent} onClose={() => setViewingAgent(null)} onUpdateAgent={handleUpdateAgent} currentUser={currentUser} deals={deals} onOpenDeal={(d) => { setDealModalZIndex('z-[160]'); setEditingDeal(d); }} zIndex={agentModalZIndex} onNavigate={handleAgentNavigate} hasNext={sortedAgents.indexOf(viewingAgent) < sortedAgents.length - 1} hasPrevious={sortedAgents.indexOf(viewingAgent) > 0} onMoveToBuyer={() => handleMoveAgentToBuyer(viewingAgent)} onMoveToWholesaler={() => handleMoveAgentToWholesaler(viewingAgent)} />)}
-      {editingAgent && (<AgentProfileModal agent={editingAgent} onClose={() => setEditingAgent(null)} onUpdateAgent={handleUpdateAgent} currentUser={currentUser} deals={deals} onOpenDeal={(d) => { setDealModalZIndex('z-[160]'); setEditingDeal(d); }} onDelete={async (id) => { const s = await api.delete(id, 'Agents'); if(s) { setAgents(prev => prev.filter(a => a.id !== id)); setEditingAgent(null); }}} zIndex={agentModalZIndex} onNavigate={handleAgentNavigate} hasNext={sortedAgents.indexOf(editingAgent) < sortedAgents.length - 1} hasPrevious={sortedAgents.indexOf(editingAgent) > 0} onMoveToBuyer={() => handleMoveAgentToBuyer(editingAgent)} onMoveToWholesaler={() => handleMoveAgentToWholesaler(editingAgent)} />)}
-      {editingDeal && (
+      {editingAgent && (<AgentProfileModal agent={editingAgent} onClose={() => setEditingAgent(null)} onUpdateAgent={handleUpdateAgent} currentUser={currentUser} deals={deals} onOpenDeal={(d) => { setDealModalZIndex('z-[160]'); setEditingDeal(d); }} onDelete={async (id) => { const agentToDelete = agents.find(a => a.id === id); const s = await api.delete(id, 'Agents'); if(s) { setAgents(prev => prev.filter(a => a.id !== id)); setEditingAgent(null); if (agentToDelete) { activityLogService.logActivity(currentUser, 'DELETE', 'AGENT', id, `Deleted agent: ${agentToDelete.name}`, {}, agentToDelete.name); } }}} zIndex={agentModalZIndex} onNavigate={handleAgentNavigate} hasNext={sortedAgents.indexOf(editingAgent) < sortedAgents.length - 1} hasPrevious={sortedAgents.indexOf(editingAgent) > 0} onMoveToBuyer={() => handleMoveAgentToBuyer(editingAgent)} onMoveToWholesaler={() => handleMoveAgentToWholesaler(editingAgent)} />)}
+      {editingDeal && editingDeal.pipelineType === 'jv' ? (
+        <EditWholesalerDealModal
+            deal={editingDeal}
+            setDeal={setEditingDeal}
+            onSave={handleSaveEdit}
+            onClose={handleCloseEditModal}
+            onViewWholesaler={(id) => {
+                const w = wholesalers.find(w => w.id === id);
+                if (w) { setEditingWholesaler(w); setShowAddWholesalerModal(true); }
+            }}
+            wholesalerSuggestions={wholesalerSuggestions}
+            brokerageSuggestions={brokerageSuggestions}
+            showWholesalerSuggestions={showWholesalerSuggestions}
+            showBrokerageSuggestions={showBrokerageSuggestions}
+            onWholesalerLookup={handleWholesalerLookup}
+            onBrokerageLookup={handleBrokerageLookup}
+            onSelectWholesaler={selectWholesaler}
+            onSelectBrokerage={selectBrokerage}
+            wholesalers={wholesalers}
+            onUpdateWholesaler={handleUpdateWholesaler}
+            onAddNewWholesaler={async (name) => {
+                const newWholesaler: Wholesaler = { id: generateId(), name: name || '', phone: '', email: '', companyName: '', status: 'New', notes: [`${getLogTimestamp()}: Created from Deal Modal`] };
+                const saved = await api.save(newWholesaler, 'Wholesalers');
+                if(saved) {
+                    setWholesalers(prev => [...prev, saved]);
+                    setEditingWholesaler(saved);
+                    setShowAddWholesalerModal(true);
+                }
+            }}
+            currentUser={currentUser}
+            onNavigate={handleNavigate}
+            hasNext={editingDealIndex !== -1 && editingDealIndex < orderedDeals.length - 1}
+            hasPrevious={editingDealIndex !== -1 && editingDealIndex > 0}
+            buyers={buyers}
+            onViewBuyer={(id) => {
+                const b = buyers.find(buyer => buyer.id === id);
+                if(b) { setEditingBuyer(b); setShowAddBuyerModal(true); }
+            }}
+            zIndex={dealModalZIndex}
+            allDeals={deals}
+            onSwitchToDeal={handleSwitchToDeal}
+        />
+      ) : editingDeal ? (
         <EditDealModal 
             deal={editingDeal} 
             setDeal={setEditingDeal} 
@@ -1477,7 +1885,6 @@ export default function App() {
             onNavigate={handleNavigate} 
             hasNext={editingDealIndex !== -1 && editingDealIndex < orderedDeals.length - 1} 
             hasPrevious={editingDealIndex !== -1 && editingDealIndex > 0} 
-            onUpdate={updateDeal} 
             buyers={buyers} 
             onViewBuyer={(id) => { 
                 const b = buyers.find(buyer => buyer.id === id); 
@@ -1487,7 +1894,7 @@ export default function App() {
             allDeals={deals}
             onSwitchToDeal={handleSwitchToDeal}
         />
-      )}
+      ) : null}
       
       {showOnlineUsersModal && (
           <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setShowOnlineUsersModal(false)}>

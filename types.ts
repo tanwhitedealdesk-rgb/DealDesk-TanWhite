@@ -6,6 +6,7 @@ export interface ActivityLog {
   action_type: string; // 'CREATE', 'UPDATE', 'DELETE', 'STATUS_CHANGE', etc.
   entity_type: string; // 'DEAL', 'AGENT', 'BUYER', 'NOTE', etc.
   entity_id: string;
+  entity_display?: string; // e.g., "123 Main St" or "John Doe"
   description: string;
   metadata?: any;
   created_at: string;
@@ -38,6 +39,7 @@ export interface Comparable {
 export interface Deal {
   id: string;
   createdAt?: string;
+  pipelineType?: 'main' | 'jv'; // New Field to distinguish pipelines
   address: string;
   mls: string;
   listPrice: number;

@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Home, PhoneOutgoing, DollarSign, User, Clock, ArrowRight, Save, X, Activity, Briefcase, Calendar, MapPin, FileText, TrendingUp, AlertTriangle, CheckCircle, Search, Phone, Mail, Send, Copy, Plus, ChevronLeft, ChevronRight, TrendingDown, Loader2, LayoutGrid, Image as ImageIcon, Link as LinkIcon, Users, Pencil, Trash2, ArrowRightLeft } from 'lucide-react';
 import { api } from '../../services/api';
-import { Deal, Agent, Brokerage, Comparable, User as UserType, Buyer } from '../../types';
+import { Deal, Wholesaler, Brokerage, Comparable, User as UserType, Buyer } from '../../types';
 import { formatNumberWithCommas, parseNumberFromCurrency, formatPhoneNumber, getLogTimestamp, formatCurrency, calculateDaysRemaining, serverFunctions, processPhotoUrl, loadGoogleMapsScript } from '../../services/utils';
 import { ModalFooter, NavigationArrows, UnsavedChangesModal } from '../Shared/ModalComponents';
 import { useAutoSave, SavedNotification } from '../Shared/AutoSave';
@@ -20,25 +20,25 @@ import {
     CLOSED_STATUSES 
 } from '../../constants';
 
-interface EditDealModalProps {
+interface EditWholesalerDealModalProps {
     deal: Deal;
     setDeal: React.Dispatch<React.SetStateAction<Deal>>;
     onSave: (e?: React.FormEvent, shouldClose?: boolean, dealToSave?: Deal) => Promise<Deal | null>;
     onClose: (e: any) => void;
-    onViewAgent: (nameOrId: string) => void;
+    onViewWholesaler: (nameOrId: string) => void;
     
-    agentSuggestions: Agent[];
+    wholesalerSuggestions: Wholesaler[];
     brokerageSuggestions: Brokerage[];
-    showAgentSuggestions: boolean;
+    showWholesalerSuggestions: boolean;
     showBrokerageSuggestions: boolean;
-    onAgentLookup: (val: string) => void;
+    onWholesalerLookup: (val: string) => void;
     onBrokerageLookup: (val: string) => void;
-    onSelectAgent: (agent: Agent) => void;
+    onSelectWholesaler: (agent: Wholesaler) => void;
     onSelectBrokerage: (brokerage: Brokerage) => void;
     
-    agents?: Agent[];
-    onUpdateAgent?: (agentId: string, updates: Partial<Agent>) => void;
-    onAddNewAgent?: (name?: string) => void;
+    wholesalers?: Wholesaler[];
+    onUpdateWholesaler?: (agentId: string, updates: Partial<Wholesaler>) => void;
+    onAddNewWholesaler?: (name?: string) => void;
     currentUser?: UserType | null;
 
     onNavigate: (direction: 'prev' | 'next') => void;
@@ -56,22 +56,22 @@ interface EditDealModalProps {
     onSwitchToDeal?: (deal: Deal) => void;
 }
 
-const AgentSlot: React.FC<{
+const WholesalerSlot: React.FC<{
     slotIndex: number;
     agentId?: string;
     agentName?: string;
-    agent?: Agent; 
-    allAgents: Agent[];
-    onSelect: (agent: Agent) => void;
+    agent?: Wholesaler; 
+    allWholesalers: Wholesaler[];
+    onSelect: (agent: Wholesaler) => void;
     onClear: () => void;
-    onViewProfile: (agent: Agent) => void;
-    onUpdate?: (agentId: string, updates: Partial<Agent>) => void;
+    onViewProfile: (agent: Wholesaler) => void;
+    onUpdate?: (agentId: string, updates: Partial<Wholesaler>) => void;
     customNameValue?: string;
     onCustomNameChange?: (val: string) => void;
-    onGenerateEmail?: (agent: Agent) => void;
-    onAddNewAgent?: (name?: string) => void;
+    onGenerateEmail?: (agent: Wholesaler) => void;
+    onAddNewWholesaler?: (name?: string) => void;
     onBlur?: () => void;
-}> = ({ slotIndex, agent, allAgents, onSelect, onClear, onViewProfile, onUpdate, customNameValue, onCustomNameChange, onGenerateEmail, onAddNewAgent, onBlur }) => {
+}> = ({ slotIndex, agent, allWholesalers, onSelect, onClear, onViewProfile, onUpdate, customNameValue, onCustomNameChange, onGenerateEmail, onAddNewWholesaler, onBlur }) => {
     
     const [searchTerm, setSearchTerm] = useState("");
     const [showDropdown, setShowDropdown] = useState(false);
@@ -82,8 +82,8 @@ const AgentSlot: React.FC<{
         }
     }, [slotIndex, agent, customNameValue]);
 
-    const filteredAgents = searchTerm.length > 0 
-        ? allAgents.filter(a => a.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    const filteredWholesalers = searchTerm.length > 0 
+        ? allWholesalers.filter(a => a.name.toLowerCase().includes(searchTerm.toLowerCase()))
         : [];
 
     const handleSearchChange = (val: string) => {
@@ -123,7 +123,7 @@ const AgentSlot: React.FC<{
                         <div className="flex justify-between items-start">
                             <div className="group/link flex-1 min-w-0">
                                 <div className="font-bold text-gray-900 dark:text-white text-xl truncate group-hover/link:text-blue-500 dark:group-hover/link:text-blue-400 transition-colors">{agent.name}</div>
-                                <div className="text-base text-purple-600 dark:text-purple-400 font-medium truncate">{agent.brokerage || 'No Brokerage'}</div>
+                                <div className="text-base text-purple-600 dark:text-purple-400 font-medium truncate">{agent.companyName || 'No Company'}</div>
                             </div>
                         </div>
 
@@ -182,7 +182,7 @@ const AgentSlot: React.FC<{
                 <Search className="absolute left-3 top-3.5 text-gray-400" size={16} />
                 <input 
                     type="text" 
-                    placeholder="Type Agent's Name..." 
+                    placeholder="Type Wholesaler's Name..." 
                     className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-3 pl-10 text-gray-900 dark:text-white text-sm focus:border-blue-500 outline-none"
                     value={searchTerm}
                     onChange={(e) => handleSearchChange(e.target.value)}
@@ -195,7 +195,7 @@ const AgentSlot: React.FC<{
             </div>
             {showDropdown && searchTerm.length > 0 && (
                 <div className="absolute top-full left-0 right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-b-lg mt-1 z-20 max-h-40 overflow-y-auto shadow-xl">
-                    {filteredAgents.length > 0 ? filteredAgents.map(a => (
+                    {filteredWholesalers.length > 0 ? filteredWholesalers.map(a => (
                         <div 
                             key={a.id} 
                             className="p-3 hover:bg-blue-50 dark:hover:bg-blue-900 cursor-pointer text-sm text-gray-600 dark:text-gray-300 border-b border-gray-100 dark:border-gray-700 last:border-0 flex items-center justify-between group"
@@ -210,25 +210,25 @@ const AgentSlot: React.FC<{
                                 </div>
                                 <div>
                                     <div className="font-bold text-gray-900 dark:text-white">{a.name}</div>
-                                    <div className="text-xs">{a.brokerage}</div>
+                                    <div className="text-xs">{a.companyName}</div>
                                 </div>
                             </div>
                         </div>
                     )) : (
-                        <div className="p-3 text-sm text-gray-500 italic border-b border-gray-200 dark:border-gray-700">No agents found</div>
+                        <div className="p-3 text-sm text-gray-500 italic border-b border-gray-200 dark:border-gray-700">No wholesalers found</div>
                     )}
                     
-                    {onAddNewAgent && (
+                    {onAddNewWholesaler && (
                          <button 
                             type="button"
                             className="w-full text-left p-3 hover:bg-blue-50 dark:hover:bg-blue-900/50 cursor-pointer text-sm text-blue-500 dark:text-blue-400 font-bold flex items-center gap-2 sticky bottom-0 bg-white dark:bg-gray-800"
                             onMouseDown={(e) => {
                                 e.preventDefault();
-                                onAddNewAgent(searchTerm);
+                                onAddNewWholesaler(searchTerm);
                                 setShowDropdown(false);
                             }}
                         >
-                            <Plus size={14} /> Add New Agent {searchTerm}
+                            <Plus size={14} /> Add New Wholesaler {searchTerm}
                         </button>
                     )}
                 </div>
@@ -238,11 +238,11 @@ const AgentSlot: React.FC<{
 };
 
 
-export const EditDealModal: React.FC<EditDealModalProps> = ({ 
-    deal, setDeal, onSave, onClose, onViewAgent, 
-    agentSuggestions, brokerageSuggestions, showAgentSuggestions, showBrokerageSuggestions,
-    onAgentLookup, onBrokerageLookup, onSelectAgent, onSelectBrokerage,
-    agents = [], onUpdateAgent, onAddNewAgent, currentUser,
+export const EditWholesalerDealModal: React.FC<EditWholesalerDealModalProps> = ({ 
+    deal, setDeal, onSave, onClose, onViewWholesaler, 
+    wholesalerSuggestions, brokerageSuggestions, showWholesalerSuggestions, showBrokerageSuggestions,
+    onWholesalerLookup, onBrokerageLookup, onSelectWholesaler, onSelectBrokerage,
+    wholesalers = [], onUpdateWholesaler, onAddNewWholesaler, currentUser,
     onNavigate, hasNext, hasPrevious, onUpdate, buyers, onViewBuyer,
     zIndex = 'z-[120]', 
     allDeals = [], onSwitchToDeal
@@ -454,8 +454,8 @@ export const EditDealModal: React.FC<EditDealModalProps> = ({
     const [emailContent, setEmailContent] = useState("");
     const [emailSubject, setEmailSubject] = useState("");
 
-    const agent1 = agents.find(a => a.name.toLowerCase() === (deal.agentName || '').toLowerCase());
-    const agent2 = agents.find(a => a.id === deal.secondAgentId);
+    const wholesaler1 = wholesalers.find(a => a.name.toLowerCase() === (deal.agentName || '').toLowerCase());
+    const wholesaler2 = wholesalers.find(a => a.id === deal.secondAgentId);
     
     const daysToInsp = calculateDaysRemaining(deal.inspectionDate);
     const daysToEMD = calculateDaysRemaining(deal.emdDate);
@@ -467,18 +467,18 @@ export const EditDealModal: React.FC<EditDealModalProps> = ({
         return 'text-green-600 dark:text-green-400 font-bold';
     };
 
-    // ... (Agent handling methods remain unchanged) ...
-    const handleSelectAgent1 = (agent: Agent) => {
+    // ... (Wholesaler handling methods remain unchanged) ...
+    const handleSelectWholesaler1 = (agent: Wholesaler) => {
         updateDealState({
             agentName: agent.name,
             agentPhone: agent.phone,
             agentEmail: agent.email,
-            agentBrokerage: agent.brokerage
+            agentBrokerage: agent.companyName || ''
         });
         triggerSave();
     };
 
-    const handleClearAgent1 = () => {
+    const handleClearWholesaler1 = () => {
         updateDealState({
             agentName: '',
             agentPhone: '',
@@ -488,12 +488,12 @@ export const EditDealModal: React.FC<EditDealModalProps> = ({
         triggerSave();
     };
 
-    const handleSelectAgent2 = (agent: Agent) => {
+    const handleSelectWholesaler2 = (agent: Wholesaler) => {
         updateDealState({ secondAgentId: agent.id });
         triggerSave();
     };
 
-    const handleGenerateEmail = (agent: Agent) => {
+    const handleGenerateEmail = (agent: Wholesaler) => {
         const agentFirstName = agent.name.split(' ')[0];
         
         const offerPriceVal = deal.offerPrice || 0;
@@ -975,7 +975,7 @@ Phone: (636) 486-6088`;
                             </div>
 
                             <div className="grid md:grid-cols-4 gap-4">
-                                <div><label className="text-xs text-gray-500 block mb-1">For Sale By</label><select className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded p-2 text-gray-900 dark:text-white text-sm" value={deal.forSaleBy || ''} onChange={e => { updateDealState({forSaleBy: e.target.value}); if(onUpdate) onUpdate(deal.id, {forSaleBy: e.target.value}); triggerSave(); }}><option value="">Select...</option><option value="Agent">Agent</option><option value="Owner">Owner</option></select></div>
+                                <div><label className="text-xs text-gray-500 block mb-1">For Sale By</label><select className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded p-2 text-gray-900 dark:text-white text-sm" value={deal.forSaleBy || ''} onChange={e => { updateDealState({forSaleBy: e.target.value}); if(onUpdate) onUpdate(deal.id, {forSaleBy: e.target.value}); triggerSave(); }}><option value="">Select...</option><option value="Wholesaler">Wholesaler</option><option value="Owner">Owner</option></select></div>
                                 <div><label className="text-xs text-gray-500 block mb-1">MLS Number</label><input className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded p-2 text-gray-900 dark:text-white text-sm font-mono" value={deal.mls || ''} onChange={e => updateDealState({mls: e.target.value})} onBlur={handleAutoSave} /></div>
                                 <div><label className="text-xs text-gray-500 block mb-1">Property Type</label><select className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded p-2 text-gray-900 dark:text-white text-sm" value={deal.propertyType || ''} onChange={e => { updateDealState({propertyType: e.target.value}); if(onUpdate) onUpdate(deal.id, {propertyType: e.target.value}); triggerSave(); }}><option value="">Select...</option><option value="Single Family Residential">Single Family Residential</option><option value="Multi-Family Residential">Multi-Family Residential</option><option value="Commercial">Commercial</option><option value="Land">Land</option></select></div>
                                 <div><label className="text-xs text-gray-500 block mb-1">Year Built</label><input type="number" className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded p-2 text-gray-900 dark:text-white text-sm" value={deal.yearBuilt || ''} onChange={e => updateDealState({yearBuilt: Number(e.target.value)})} onBlur={handleAutoSave} /></div>
@@ -1012,21 +1012,21 @@ Phone: (636) 486-6088`;
                                 <div><label className="text-xs text-gray-500 block mb-1">County</label><select className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded p-2 text-gray-900 dark:text-white text-sm" value={deal.county || ''} onChange={e => { updateDealState({county: e.target.value}); if(onUpdate) onUpdate(deal.id, {county: e.target.value}); triggerSave(); }}><option value="">Select...</option>{COUNTIES.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
                                 <div><label className="text-xs text-gray-500 block mb-1">Lock Box Code</label><input className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded p-2 text-gray-900 dark:text-white text-sm" value={deal.lockBoxCode || ''} onChange={e => updateDealState({lockBoxCode: e.target.value})} onBlur={handleAutoSave} placeholder="1234" /></div>
                             </div>
-                            <div><label className="text-xs text-gray-500 block mb-1 font-bold uppercase">Listing Description</label><textarea className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded p-3 text-gray-900 dark:text-white text-sm focus:border-blue-500 outline-none h-48 resize-none" value={deal.listingDescription || ''} onChange={e => updateDealState({listingDescription: e.target.value})} onBlur={handleAutoSave} placeholder="Paste full property description here..." /></div>
+                            <div><label className="text-xs text-gray-500 block mb-1 font-bold uppercase">Deal Description</label><textarea className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded p-3 text-gray-900 dark:text-white text-sm focus:border-blue-500 outline-none h-48 resize-none" value={deal.listingDescription || ''} onChange={e => updateDealState({listingDescription: e.target.value})} onBlur={handleAutoSave} placeholder="Paste full property description here..." /></div>
                        </div>
                    </div>
 
                    {/* Rest of the sections remain unchanged */}
                    <div className="grid md:grid-cols-2 gap-8">
-                       {/* Agent Contact & Workflow Grid ... */}
+                       {/* Wholesaler Contact & Workflow Grid ... */}
                         <div className="space-y-4">
                             <div className="flex items-center justify-between pb-2 border-b border-gray-200 dark:border-gray-800">
-                                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2"><User size={14}/> Agent Contact</h3>
-                                {agent1 && <button type="button" onClick={() => onViewAgent(agent1.id)} className="text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors flex items-center gap-1">Profile <ArrowRight size={10} className="-rotate-45"/></button>}
+                                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2"><User size={14}/> Wholesaler Contact</h3>
+                                {wholesaler1 && <button type="button" onClick={() => onViewWholesaler(wholesaler1.id)} className="text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors flex items-center gap-1">Profile <ArrowRight size={10} className="-rotate-45"/></button>}
                             </div>
                             <div className="space-y-3">
-                                <AgentSlot slotIndex={1} agent={agent1} allAgents={agents} onSelect={handleSelectAgent1} onClear={handleClearAgent1} onViewProfile={(agent) => onViewAgent(agent.id)} onUpdate={onUpdateAgent} customNameValue={deal.agentName} onCustomNameChange={(val) => updateDealState({agentName: val})} onGenerateEmail={handleGenerateEmail} onAddNewAgent={onAddNewAgent} onBlur={handleAutoSave} />
-                                <AgentSlot slotIndex={2} agent={agent2} allAgents={agents} onSelect={handleSelectAgent2} onClear={() => { updateDealState({secondAgentId: undefined}); triggerSave(); }} onViewProfile={(agent) => onViewAgent(agent.id)} onUpdate={onUpdateAgent} onGenerateEmail={handleGenerateEmail} onAddNewAgent={onAddNewAgent} onBlur={handleAutoSave} />
+                                <WholesalerSlot slotIndex={1} agent={wholesaler1} allWholesalers={wholesalers} onSelect={handleSelectWholesaler1} onClear={handleClearWholesaler1} onViewProfile={(agent) => onViewWholesaler(agent.id)} onUpdate={onUpdateWholesaler} customNameValue={deal.agentName} onCustomNameChange={(val) => updateDealState({agentName: val})} onGenerateEmail={handleGenerateEmail} onAddNewWholesaler={onAddNewWholesaler} onBlur={handleAutoSave} />
+                                <WholesalerSlot slotIndex={2} agent={wholesaler2} allWholesalers={wholesalers} onSelect={handleSelectWholesaler2} onClear={() => { updateDealState({secondAgentId: undefined}); triggerSave(); }} onViewProfile={(agent) => onViewWholesaler(agent.id)} onUpdate={onUpdateWholesaler} onGenerateEmail={handleGenerateEmail} onAddNewWholesaler={onAddNewWholesaler} onBlur={handleAutoSave} />
                             </div>
                         </div>
 
@@ -1043,8 +1043,8 @@ Phone: (636) 486-6088`;
     updateDealState(updates); 
     if(onUpdate) onUpdate(deal.id, updates);
     triggerSave(); 
-}}><option disabled>-- Potential Deals --</option>{POTENTIAL_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}<option disabled>-- Under Contract --</option>{UNDER_CONTRACT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}<option disabled>-- Counter Offers --</option>{COUNTER_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}<option disabled>-- Declined / Dead --</option>{DECLINED_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}<option disabled>-- Closed --</option>{CLOSED_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
-                                <div className="grid grid-cols-2 gap-4"><div><label className="text-[10px] text-gray-500 block mb-1 uppercase font-bold">Contact Status</label><select className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded p-2 text-gray-900 dark:text-white text-xs" value={deal.contactStatus || ''} onChange={e => { updateDealState({contactStatus: e.target.value}); if(onUpdate) onUpdate(deal.id, {contactStatus: e.target.value}); triggerSave(); }}><option value="Agent Not Contacted Yet">Agent Not Contacted Yet</option><option value="Sent Initial Offer Email">Sent Initial Offer Email</option><option value="Sent Initial Text Message">Sent Initial Text Message</option><option value="First Call, No Answer">First Call, No Answer</option><option value="Spoke With Agent">Spoke With Agent</option><option value="Waiting To Hear Back">Waiting To Hear Back</option><option value="Offer Declined">Offer Declined</option><option value="Offer Accepted">Offer Accepted</option></select></div><div><label className="text-[10px] text-gray-500 block mb-1 uppercase font-bold">Acq. Manager</label><select className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded p-2 text-gray-900 dark:text-white text-xs" value={deal.acquisitionManager || ""} onChange={e => { updateDealState({acquisitionManager: e.target.value}); if(onUpdate) onUpdate(deal.id, {acquisitionManager: e.target.value}); triggerSave(); }}><option value="" disabled>Unassigned</option><option value="Ashari Zakar">Ashari Zakar</option><option value="Angelica Henderson">Angelica Henderson</option><option value="Grias Ramos">Grias Ramos</option></select></div></div>
+}}><option disabled>-- Pipeline Status --</option><option value="Available">Available</option><option value="No Longer Available">No Longer Available</option></select></div>
+                                <div className="grid grid-cols-2 gap-4"><div><label className="text-[10px] text-gray-500 block mb-1 uppercase font-bold">Contact Status</label><select className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded p-2 text-gray-900 dark:text-white text-xs" value={deal.contactStatus || ''} onChange={e => { updateDealState({contactStatus: e.target.value}); if(onUpdate) onUpdate(deal.id, {contactStatus: e.target.value}); triggerSave(); }}><option value="Have Not Spoken With Wholesaler">Have Not Spoken With Wholesaler</option><option value="Spoke With Wholesaler">Spoke With Wholesaler</option></select></div><div><label className="text-[10px] text-gray-500 block mb-1 uppercase font-bold">Acq. Manager</label><select className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded p-2 text-gray-900 dark:text-white text-xs" value={deal.acquisitionManager || ""} onChange={e => { updateDealState({acquisitionManager: e.target.value}); if(onUpdate) onUpdate(deal.id, {acquisitionManager: e.target.value}); triggerSave(); }}><option value="" disabled>Unassigned</option><option value="Ashari Zakar">Ashari Zakar</option><option value="Angelica Henderson">Angelica Henderson</option><option value="Grias Ramos">Grias Ramos</option></select></div></div>
                                 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-gray-200 dark:border-gray-800/50">
                                     <div>

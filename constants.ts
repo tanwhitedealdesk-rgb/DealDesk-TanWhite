@@ -45,6 +45,11 @@ export const CLOSED_STATUSES = [
   'Deal Successfully Closed'
 ];
 
+export const JV_PIPELINE_STATUSES = [
+  'Available',
+  'No Longer Available'
+];
+
 export const OFFER_DECISIONS = [
     ...POTENTIAL_STATUSES,
     ...UNDER_CONTRACT_STATUSES,

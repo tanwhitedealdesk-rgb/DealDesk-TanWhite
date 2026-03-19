@@ -60,7 +60,7 @@ export const DealCard: React.FC<DealCardProps> = ({ deal, agents, onMove, onUpda
   const matchingAgent = agents?.find(a => a.name.toLowerCase() === (deal.agentName || '').toLowerCase());
   const displayPhone = matchingAgent?.phone || deal.agentPhone;
   const displayEmail = matchingAgent?.email || deal.agentEmail;
-  const displayBrokerage = matchingAgent?.brokerage || deal.agentBrokerage;
+  const displayBrokerage = matchingAgent?.brokerage || (matchingAgent as any)?.companyName || deal.agentBrokerage;
 
   const getUrgencyColor = (days: number | null) => {
     if (days === null) return 'text-gray-400';
