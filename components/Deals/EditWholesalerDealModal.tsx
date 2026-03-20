@@ -38,7 +38,7 @@ interface EditWholesalerDealModalProps {
     
     wholesalers?: Wholesaler[];
     onUpdateWholesaler?: (agentId: string, updates: Partial<Wholesaler>) => void;
-    onAddNewWholesaler?: (name?: string) => void;
+    onAddNewWholesaler?: (name?: string) => Promise<Wholesaler | void>;
     currentUser?: UserType | null;
 
     onNavigate: (direction: 'prev' | 'next') => void;
@@ -69,7 +69,7 @@ const WholesalerSlot: React.FC<{
     customNameValue?: string;
     onCustomNameChange?: (val: string) => void;
     onGenerateEmail?: (agent: Wholesaler) => void;
-    onAddNewWholesaler?: (name?: string) => void;
+    onAddNewWholesaler?: (name?: string) => Promise<Wholesaler | void>;
     onBlur?: () => void;
 }> = ({ slotIndex, agent, allWholesalers, onSelect, onClear, onViewProfile, onUpdate, customNameValue, onCustomNameChange, onGenerateEmail, onAddNewWholesaler, onBlur }) => {
     
@@ -222,9 +222,14 @@ const WholesalerSlot: React.FC<{
                          <button 
                             type="button"
                             className="w-full text-left p-3 hover:bg-blue-50 dark:hover:bg-blue-900/50 cursor-pointer text-sm text-blue-500 dark:text-blue-400 font-bold flex items-center gap-2 sticky bottom-0 bg-white dark:bg-gray-800"
-                            onMouseDown={(e) => {
+                            onMouseDown={async (e) => {
                                 e.preventDefault();
-                                onAddNewWholesaler(searchTerm);
+                                if (onAddNewWholesaler) {
+                                    const newW = await onAddNewWholesaler(searchTerm);
+                                    if (newW) {
+                                        onSelect(newW);
+                                    }
+                                }
                                 setShowDropdown(false);
                             }}
                         >
@@ -335,8 +340,8 @@ export const EditWholesalerDealModal: React.FC<EditWholesalerDealModalProps> = (
         try {
             const savedDeal = await onSave(undefined, false, dealRef.current);
             if (savedDeal && savedDeal.id) {
-                if (!dealRef.current.id || dealRef.current.id === '' || dealRef.current.id === 'undefined') {
-                    console.log("Creating new deal -> ID Assigned:", savedDeal.id);
+                if (dealRef.current.id !== savedDeal.id) {
+                    console.log("ID Updated from server:", savedDeal.id);
                     dealRef.current.id = savedDeal.id;
                     setDeal(prev => ({ ...prev, id: savedDeal.id }));
                 }

@@ -1132,8 +1132,8 @@ export default function App() {
         const saved = await api.save(updatedDeal, tableName);
         if (saved) {
             setDeals(prev => {
-                const exists = prev.some(d => d.id === saved.id);
-                if (exists) return prev.map(d => d.id === saved.id ? saved : d);
+                const exists = prev.some(d => d.id === updatedDeal.id);
+                if (exists) return prev.map(d => d.id === updatedDeal.id ? saved : d);
                 return [saved, ...prev];
             });
             checkAndSaveAgent(saved);
@@ -1840,6 +1840,7 @@ export default function App() {
                     setWholesalers(prev => [...prev, saved]);
                     setEditingWholesaler(saved);
                     setShowAddWholesalerModal(true);
+                    return saved;
                 }
             }}
             currentUser={currentUser}
