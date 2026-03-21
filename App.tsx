@@ -248,9 +248,15 @@ export default function App() {
     const fetchData = async () => {
       setIsLoading(true);
       try {
+        const deduplicateById = <T extends { id: string }>(items: T[]): T[] => {
+            const map = new Map<string, T>();
+            items.forEach(item => map.set(item.id, item));
+            return Array.from(map.values());
+        };
+
         const dealsData = await api.load('Deals');
         const jvDealsData = await api.load('JVDeals');
-        const allDealsData = [...dealsData, ...jvDealsData];
+        const allDealsData = deduplicateById([...dealsData, ...jvDealsData]);
         const cleanDeals = allDealsData.map((d: any) => ({
             ...d,
             logs: Array.isArray(d.logs) ? d.logs : [],
@@ -265,7 +271,7 @@ export default function App() {
         setDeals(cleanDeals);
         
         const agentsData = await api.load('Agents');
-        const cleanAgents = agentsData.map((a: any) => ({
+        const cleanAgents = deduplicateById(agentsData).map((a: any) => ({
             ...a,
             subscriptionStatus: a.subscriptionStatus || 'Subscribed',
             notes: Array.isArray(a.notes) ? a.notes : [],
@@ -275,7 +281,7 @@ export default function App() {
         setAgents(cleanAgents);
         
         const wholesalersData = await api.load('Wholesalers');
-        const cleanWholesalers = wholesalersData.map((w: any) => ({
+        const cleanWholesalers = deduplicateById(wholesalersData).map((w: any) => ({
             ...w,
             subscriptionStatus: w.subscriptionStatus || 'Subscribed',
             notes: Array.isArray(w.notes) ? w.notes : [],
@@ -286,17 +292,17 @@ export default function App() {
         setWholesalers(cleanWholesalers);
 
         const contactsData = await api.load('Contacts');
-        setContacts(contactsData || []);
+        setContacts(deduplicateById(contactsData || []));
 
         const emailListsData = await api.load('EmailLists');
-        setEmailLists(emailListsData || []);
+        setEmailLists(deduplicateById(emailListsData || []));
 
         const brokeragesData = await api.load('Brokerages');
-        setBrokerages(brokeragesData);
+        setBrokerages(deduplicateById(brokeragesData || []));
 
         const buyersData = await api.load('Buyers');
         if (buyersData && Array.isArray(buyersData) && buyersData.length > 0) {
-            const cleanBuyers = buyersData.map((b: any) => {
+            const cleanBuyers = deduplicateById(buyersData).map((b: any) => {
                 let notes = Array.isArray(b.notes) ? b.notes : [];
                 const buyerObj = {
                     ...b,
@@ -318,7 +324,7 @@ export default function App() {
             setBuyers(cleanBuyers);
         }
         const campaignsData = await api.load('Campaigns');
-        setCampaigns(campaignsData);
+        setCampaigns(deduplicateById(campaignsData || []));
       } catch (e) {
         console.error("Fetch data error", e);
         alert("Failed to load data. Please check connection.");
@@ -385,7 +391,10 @@ export default function App() {
           };
           const savedAgent = await api.save(newAgent, 'Agents'); 
           if(savedAgent) {
-              setAgents(prev => [...prev, savedAgent]);
+              setAgents(prev => {
+                  if (prev.some(a => a.id === savedAgent.id)) return prev;
+                  return [...prev, savedAgent];
+              });
               
               activityLogService.logActivity(
                   currentUser,
@@ -442,7 +451,10 @@ export default function App() {
           if (agent) {
               setAgents(prev => prev.map(a => a.id === agentId ? saved : a));
           } else {
-              setAgents(prev => [...prev, saved]);
+              setAgents(prev => {
+                  if (prev.some(a => a.id === saved.id)) return prev;
+                  return [...prev, saved];
+              });
           }
           if (viewingAgent && viewingAgent.id === agentId) setViewingAgent(saved);
           if (editingAgent && editingAgent.id === agentId) setEditingAgent(saved);
@@ -732,7 +744,10 @@ export default function App() {
       };
       const saved = await api.save(newAgent, 'Agents');
       if (saved) {
-          setAgents(prev => [...prev, saved]);
+          setAgents(prev => {
+              if (prev.some(a => a.id === saved.id)) return prev;
+              return [...prev, saved];
+          });
           await handleDeleteBuyer(buyer.id);
           
           activityLogService.logActivity(
@@ -769,7 +784,10 @@ export default function App() {
       };
       const saved = await api.save(newWholesaler, 'Wholesalers');
       if (saved) {
-          setWholesalers(prev => [...prev, saved]);
+          setWholesalers(prev => {
+              if (prev.some(w => w.id === saved.id)) return prev;
+              return [...prev, saved];
+          });
           await handleDeleteBuyer(buyer.id);
           
           activityLogService.logActivity(
@@ -809,7 +827,10 @@ export default function App() {
       };
       const saved = await api.save(newBuyer, 'Buyers');
       if (saved) {
-          setBuyers(prev => [...prev, saved]);
+          setBuyers(prev => {
+              if (prev.some(b => b.id === saved.id)) return prev;
+              return [...prev, saved];
+          });
           setAgents(prev => prev.filter(a => a.id !== agent.id));
           await api.delete(agent.id, 'Agents');
           
@@ -847,7 +868,10 @@ export default function App() {
       };
       const saved = await api.save(newWholesaler, 'Wholesalers');
       if (saved) {
-          setWholesalers(prev => [...prev, saved]);
+          setWholesalers(prev => {
+              if (prev.some(w => w.id === saved.id)) return prev;
+              return [...prev, saved];
+          });
           setAgents(prev => prev.filter(a => a.id !== agent.id));
           await api.delete(agent.id, 'Agents');
           
@@ -888,7 +912,10 @@ export default function App() {
       };
       const saved = await api.save(newBuyer, 'Buyers');
       if(saved) {
-          setBuyers(prev => [...prev, saved]);
+          setBuyers(prev => {
+              if (prev.some(b => b.id === saved.id)) return prev;
+              return [...prev, saved];
+          });
           await handleDeleteWholesaler(wholesaler.id);
           
           activityLogService.logActivity(
@@ -1307,7 +1334,10 @@ export default function App() {
         const tableName = isJv ? 'JVDeals' : 'Deals';
         const savedRecord = await api.save(newDealInit, tableName);
         if (savedRecord) {
-            setDeals(prev => [savedRecord, ...prev]);
+            setDeals(prev => {
+                if (prev.some(d => d.id === savedRecord.id)) return prev;
+                return [savedRecord, ...prev];
+            });
             setEditingDeal(savedRecord);
             setDealModalZIndex('z-[120]');
             
@@ -1786,7 +1816,7 @@ export default function App() {
         </main>
       </div>
 
-      {importFile && (<ImportMapModal file={importFile} onClose={() => setImportFile(null)} onImport={async (d) => { const saved = await api.saveBatch(d,'Deals'); if(saved) { setDeals(prev=>[...prev,...saved]); activityLogService.logActivity(currentUser, 'CREATE', 'DEAL', 'batch', `Imported ${saved.length} properties`, {}, 'Batch Import'); } }} />)}
+      {importFile && (<ImportMapModal file={importFile} onClose={() => setImportFile(null)} onImport={async (d) => { const saved = await api.saveBatch(d,'Deals'); if(saved) { setDeals(prev=>{ const newIds = new Set(saved.map((s:any)=>s.id)); const old = prev.filter(p=>!newIds.has(p.id)); return [...old, ...saved]; }); activityLogService.logActivity(currentUser, 'CREATE', 'DEAL', 'batch', `Imported ${saved.length} properties`, {}, 'Batch Import'); } }} />)}
       {importBuyerFile && (<ImportBuyerMapModal file={importBuyerFile} onClose={() => setImportBuyerFile(null)} onImport={async (importedBuyers, overwrite) => {
           const saved = await api.saveBatch(importedBuyers, 'Buyers');
           if(saved) {
@@ -1799,7 +1829,7 @@ export default function App() {
           }
           setImportBuyerFile(null);
       }} />)}
-      {importAgentFile && (<ImportAgentMapModal file={importAgentFile} onClose={() => setImportAgentFile(null)} onImport={async (a) => { const saved = await api.saveBatch(a,'Agents'); if(saved) { setAgents(prev=>[...prev,...saved]); activityLogService.logActivity(currentUser, 'CREATE', 'AGENT', 'batch', `Imported ${saved.length} agents`, {}, 'Batch Import'); } }} />)}
+      {importAgentFile && (<ImportAgentMapModal file={importAgentFile} onClose={() => setImportAgentFile(null)} onImport={async (a) => { const saved = await api.saveBatch(a,'Agents'); if(saved) { setAgents(prev=>{ const newIds = new Set(saved.map((s:any)=>s.id)); const old = prev.filter(p=>!newIds.has(p.id)); return [...old, ...saved]; }); activityLogService.logActivity(currentUser, 'CREATE', 'AGENT', 'batch', `Imported ${saved.length} agents`, {}, 'Batch Import'); } }} />)}
       
 
       {showAddWholesalerModal && editingWholesaler && (<EditWholesalerModal wholesaler={editingWholesaler} onClose={() => { setShowAddWholesalerModal(false); setEditingWholesaler(null); }} onSave={handleSaveWholesaler} onDelete={handleDeleteWholesaler} currentUser={currentUser} deals={deals} onOpenDeal={(d) => { setEditingWholesaler(null); setShowAddWholesalerModal(false); setDealModalZIndex('z-[160]'); setEditingDeal(d); }} onNavigate={handleWholesalerNavigate} hasNext={sortedWholesalers.indexOf(editingWholesaler) < sortedWholesalers.length - 1} hasPrevious={sortedWholesalers.indexOf(editingWholesaler) > 0} onMoveToAgent={() => handleMoveWholesalerToAgent(editingWholesaler)} onMoveToBuyer={() => handleMoveWholesalerToBuyer(editingWholesaler)} />)}
@@ -1837,7 +1867,10 @@ export default function App() {
                 const newWholesaler: Wholesaler = { id: generateId(), name: name || '', phone: '', email: '', companyName: '', status: 'New', notes: [`${getLogTimestamp()}: Created from Deal Modal`] };
                 const saved = await api.save(newWholesaler, 'Wholesalers');
                 if(saved) {
-                    setWholesalers(prev => [...prev, saved]);
+                    setWholesalers(prev => {
+                        if (prev.some(w => w.id === saved.id)) return prev;
+                        return [...prev, saved];
+                    });
                     setEditingWholesaler(saved);
                     setShowAddWholesalerModal(true);
                     return saved;
@@ -1877,7 +1910,10 @@ export default function App() {
                 const newAgent: Agent = { id: generateId(), name: name || '', phone: '', email: '', brokerage: '', notes: [`${getLogTimestamp()}: Created from Deal Modal`] }; 
                 const saved = await api.save(newAgent, 'Agents'); 
                 if(saved) { 
-                    setAgents(prev => [...prev, saved]); 
+                    setAgents(prev => {
+                        if (prev.some(a => a.id === saved.id)) return prev;
+                        return [...prev, saved];
+                    }); 
                     setEditingAgent(saved); 
                     setAgentModalZIndex('z-[160]'); 
                 } 

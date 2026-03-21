@@ -1,4 +1,13 @@
 
+export interface SenderEmail {
+  id: string;
+  email: string;
+  name?: string;
+  is_default: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface ActivityLog {
   id: string;
   user_id: string;

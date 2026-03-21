@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Mail, Shield, Zap, Info, Save, RotateCcw, Loader2, Globe, Key, AlertCircle, CheckCircle, RefreshCw } from 'lucide-react';
+import { Mail, Shield, Zap, Info, Save, RotateCcw, Loader2, Globe, Key, AlertCircle, CheckCircle, RefreshCw, Plus, Trash2 } from 'lucide-react';
 import { GOOGLE_SCRIPT_URL } from '../../constants';
+import { api } from '../../services/api';
+import { SenderEmail } from '../../types';
 
 export const SettingsEmail: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
@@ -15,6 +17,9 @@ export const SettingsEmail: React.FC = () => {
         accessKey: '',
         secretKey: ''
     });
+
+    const [availableEmails, setAvailableEmails] = useState<SenderEmail[]>([]);
+    const [newEmail, setNewEmail] = useState('');
 
     const fetchConfig = async () => {
         setIsLoading(true);
@@ -55,10 +60,46 @@ export const SettingsEmail: React.FC = () => {
     // Load on mount
     useEffect(() => {
         fetchConfig();
+        fetchEmails();
     }, []);
+
+    const fetchEmails = async () => {
+        try {
+            const emails = await api.load('sender_emails') as SenderEmail[];
+            setAvailableEmails(emails);
+        } catch (e) {
+            console.error("Failed to load sender emails:", e);
+        }
+    };
 
     const handleChange = (field: string, value: any) => {
         setConfig(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleAddEmail = async () => {
+        if (newEmail && newEmail.includes('@') && !availableEmails.some(e => e.email === newEmail)) {
+            const emailToAdd = { email: newEmail, is_default: false };
+            try {
+                const saved = await api.save(emailToAdd, 'sender_emails');
+                if (saved) {
+                    setAvailableEmails([...availableEmails, saved]);
+                    setNewEmail('');
+                }
+            } catch (e) {
+                console.error("Failed to add email:", e);
+            }
+        }
+    };
+
+    const handleRemoveEmail = async (emailToRemove: SenderEmail) => {
+        try {
+            const success = await api.delete(emailToRemove.id, 'sender_emails');
+            if (success) {
+                setAvailableEmails(availableEmails.filter(e => e.id !== emailToRemove.id));
+            }
+        } catch (e) {
+            console.error("Failed to remove email:", e);
+        }
     };
 
     const handleSave = async () => {
@@ -233,6 +274,53 @@ export const SettingsEmail: React.FC = () => {
                                 placeholder="••••••••••••••••••••••••••••••••"
                             />
                         </div>
+                    </div>
+                </section>
+
+                {/* Available Sender Emails Section */}
+                <section className="space-y-4">
+                    <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-500 flex items-center gap-2">
+                        <Mail size={14} /> Available Sender Emails
+                    </h4>
+                    <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-4">
+                        <div className="flex gap-2">
+                            <input
+                                type="email"
+                                className="flex-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 text-gray-900 dark:text-white text-sm focus:border-blue-500 outline-none transition-colors"
+                                placeholder="Add new sender email..."
+                                value={newEmail}
+                                onChange={(e) => setNewEmail(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleAddEmail()}
+                            />
+                            <button
+                                onClick={handleAddEmail}
+                                disabled={!newEmail || !newEmail.includes('@')}
+                                className="bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/50 text-white px-4 py-2.5 rounded-lg font-bold transition-all flex items-center gap-2"
+                            >
+                                <Plus size={18} />
+                                Add
+                            </button>
+                        </div>
+                        
+                        <div className="space-y-2">
+                            {availableEmails.length === 0 ? (
+                                <p className="text-sm text-gray-500 dark:text-gray-400 italic">No emails added yet.</p>
+                            ) : (
+                                availableEmails.map((emailObj) => (
+                                    <div key={emailObj.id} className="flex items-center justify-between bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                                        <span className="text-sm text-gray-900 dark:text-white font-medium">{emailObj.email}</span>
+                                        <button
+                                            onClick={() => handleRemoveEmail(emailObj)}
+                                            className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 p-1.5 rounded-md transition-colors"
+                                            title="Remove email"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                        <p className="text-[10px] text-gray-500 mt-2">These emails will be available as options when sending LOIs. Ensure they are verified in your AWS SES dashboard.</p>
                     </div>
                 </section>
 

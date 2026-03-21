@@ -4,6 +4,8 @@ import { Home, PhoneOutgoing, DollarSign, User, Clock, ArrowRight, Save, X, Acti
 import { api, sendBulkEmailGAS } from '../../services/api';
 import { Deal, Wholesaler, Brokerage, Comparable, User as UserType, Buyer } from '../../types';
 import { formatNumberWithCommas, parseNumberFromCurrency, formatPhoneNumber, getLogTimestamp, formatCurrency, calculateDaysRemaining, serverFunctions, processPhotoUrl, loadGoogleMapsScript } from '../../services/utils';
+import { SenderEmail } from '../../types';
+import { mockOfferTemplates } from '../../services/mockData';
 import { ModalFooter, NavigationArrows, UnsavedChangesModal } from '../Shared/ModalComponents';
 import { useAutoSave, SavedNotification } from '../Shared/AutoSave';
 import { BuyerMatchModal } from './BuyerMatchModal';
@@ -459,6 +461,25 @@ export const EditWholesalerDealModal: React.FC<EditWholesalerDealModalProps> = (
     const [emailContent, setEmailContent] = useState("");
     const [emailSubject, setEmailSubject] = useState("");
     const [isSendingEmail, setIsSendingEmail] = useState(false);
+    const [availableEmails, setAvailableEmails] = useState<SenderEmail[]>([]);
+    const [selectedFromEmail, setSelectedFromEmail] = useState("");
+    const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+
+    useEffect(() => {
+        const fetchEmails = async () => {
+            try {
+                const emails = await api.load('sender_emails') as SenderEmail[];
+                setAvailableEmails(emails);
+                if (emails.length > 0) {
+                    const defaultEmail = emails.find(e => e.is_default)?.email || emails[0].email;
+                    setSelectedFromEmail(defaultEmail);
+                }
+            } catch (e) {
+                console.error("Failed to load sender emails:", e);
+            }
+        };
+        fetchEmails();
+    }, []);
 
     const wholesaler1 = wholesalers.find(a => a.name.toLowerCase() === (deal.agentName || '').toLowerCase());
     const wholesaler2 = wholesalers.find(a => a.id === deal.secondAgentId);
@@ -534,12 +555,39 @@ Best,
 
 Ashari Zakar
 Ashari Zakar Real Estate, LLC
-Email: ashari@asharizakargroup.com
+Email: ${selectedFromEmail}
 Phone: (636) 486-6088`;
 
         setEmailSubject(subject);
         setEmailContent(body);
         setShowEmailModal(true);
+        setSelectedTemplateId("");
+    };
+
+    const handleTemplateSelect = (templateId: string) => {
+        setSelectedTemplateId(templateId);
+        const template = mockOfferTemplates.find(t => t.id === templateId);
+        if (template) {
+            const agent = wholesaler1 || wholesaler2;
+            const agentName = agent ? agent.name : "[Wholesaler Name]";
+            const agentFirstName = agent ? agent.name.split(' ')[0] : "[Wholesaler First Name]";
+            const offerPriceVal = deal.offerPrice || 0;
+            const offerPriceStr = deal.offerPrice ? formatCurrency(offerPriceVal) : "[Offer Price]";
+            
+            let body = template.emailBody || "";
+            if (template.loiBody) {
+                body += `\n\n---\n\n${template.loiBody}`;
+            }
+
+            body = body.replace(/\{\{Agent_Name\}\}/g, agentName)
+                       .replace(/\{\{Agent_First_Name\}\}/g, agentFirstName)
+                       .replace(/\{\{Property_Address\}\}/g, deal.address || "[Property Address]")
+                       .replace(/\{\{Offer_Amount\}\}/g, offerPriceStr)
+                       .replace(/\{\{Your_Phone\}\}/g, "(636) 486-6088")
+                       .replace(/\{\{Your_Address\}\}/g, "Ashari Zakar Real Estate, LLC");
+
+            setEmailContent(body);
+        }
     };
 
     const handleSendLOI = async () => {
@@ -550,7 +598,7 @@ Phone: (636) 486-6088`;
         setIsSendingEmail(true);
         try {
             const htmlBody = emailContent.replace(/\n/g, '<br/>');
-            const response = await sendBulkEmailGAS([deal.agentEmail], emailSubject, htmlBody);
+            const response = await sendBulkEmailGAS([deal.agentEmail], emailSubject, htmlBody, selectedFromEmail);
             if (response && response.status === 'success') {
                 alert("LOI sent successfully!");
                 setShowEmailModal(false);
@@ -1351,6 +1399,33 @@ Phone: (636) 486-6088`;
                         <button onClick={() => setShowEmailModal(false)} className="text-gray-400 hover:text-gray-900 dark:hover:text-white"><X size={20}/></button>
                     </div>
                     <div className="p-6 flex-1 overflow-y-auto space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="text-xs text-gray-500 block mb-1 uppercase font-bold">From Email</label>
+                                <select 
+                                    className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded p-2 text-gray-900 dark:text-white text-sm"
+                                    value={selectedFromEmail}
+                                    onChange={(e) => setSelectedFromEmail(e.target.value)}
+                                >
+                                    {availableEmails.map(emailObj => (
+                                        <option key={emailObj.id} value={emailObj.email}>{emailObj.email}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-xs text-gray-500 block mb-1 uppercase font-bold">Template</label>
+                                <select 
+                                    className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded p-2 text-gray-900 dark:text-white text-sm"
+                                    value={selectedTemplateId}
+                                    onChange={(e) => handleTemplateSelect(e.target.value)}
+                                >
+                                    <option value="">-- Custom Email --</option>
+                                    {mockOfferTemplates.map(t => (
+                                        <option key={t.id} value={t.id}>{t.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
                         <div>
                             <label className="text-xs text-gray-500 block mb-1 uppercase font-bold">Subject Line</label>
                             <input 
