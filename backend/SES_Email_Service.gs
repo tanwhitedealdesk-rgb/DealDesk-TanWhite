@@ -15,12 +15,7 @@ function getAwsConfig() {
   return {
     status: 'success',
     data: {
-      sourceEmail: props.getProperty('SOURCE_EMAIL') || '',
-      region: props.getProperty('AWS_REGION') || 'us-east-2',
-      accessKey: props.getProperty('AWS_ACCESS_KEY') || '',
-      secretKey: awsSecret ? '********' : '',
-      supabaseUrl: props.getProperty('SUPABASE_URL') || '',
-      supabaseKey: sbKey ? '********' : ''
+      sourceEmail: props.getProperty('SOURCE_EMAIL') || ''
     }
   };
 }
@@ -29,19 +24,8 @@ function saveAwsConfig(data) {
   const props = PropertiesService.getScriptProperties();
   try {
     const updates = {
-      'SOURCE_EMAIL': (data.sourceEmail || '').trim(),
-      'AWS_REGION': (data.region || '').trim(),
-      'AWS_ACCESS_KEY': (data.accessKey || '').trim(),
-      'SUPABASE_URL': (data.supabaseUrl || '').trim()
+      'SOURCE_EMAIL': (data.sourceEmail || '').trim()
     };
-    
-    // Only update secrets if they are provided and not masked
-    if (data.secretKey && !data.secretKey.includes('*')) {
-      updates['AWS_SECRET_KEY'] = data.secretKey.trim();
-    }
-    if (data.supabaseKey && !data.supabaseKey.includes('*')) {
-      updates['SUPABASE_KEY'] = data.supabaseKey.trim();
-    }
 
     props.setProperties(updates);
     return { status: 'success', message: 'Configuration saved successfully' };

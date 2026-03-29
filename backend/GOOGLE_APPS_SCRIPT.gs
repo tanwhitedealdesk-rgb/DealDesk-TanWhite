@@ -4,8 +4,8 @@
 // ==========================================
 
 // --- CONFIGURATION ---
-const SUPABASE_URL = 'https://ygxgcmrhdzvfzhoxxsgv.supabase.co'; 
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlneGdjbXJoZHp2Znpob3h4c2d2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NzEwNTI0NywiZXhwIjoyMDgyNjgxMjQ3fQ.iFRJVADhePDxMNGlVw5kP2hl8VmeCvTKW9KpSUcrB40'; 
+// Credentials are now securely fetched from PropertiesService
+// (Managed via the Settings -> Email UI in the app)
 
 // --- FOLDER IDs (Target specific folders to avoid dupes/trash issues) ---
 const FOLDER_ID_DEALS = '1V1mKzWRZYuUlJia82wjGD0EUZIaU841U';
@@ -58,6 +58,8 @@ function doPost(e) {
       // --- EMAIL & AWS (Calls functions in SES_Email_Services.gs) ---
       if (payload.action === 'send_bulk_email') return response(processBulkEmail(payload.data));
       if (payload.action === 'save_aws_config') return response(saveAwsConfig(payload.data));
+      if (payload.action === 'get_aws_config') return response(getAwsConfig());
+      if (payload.action === 'get_templates') return response(getTemplates());
       if (payload.action === 'test_aws_handshake') return response(testAwsHandshake());
       if (payload.action === 'save_template') return response(saveTemplate(payload.data));
       if (payload.action === 'delete_template') return response(deleteTemplate(payload.data.id));
@@ -233,10 +235,18 @@ function findAgentDetails(name) {
 // ==========================================
 
 function executeSupabaseSql(sqlQuery) {
-  const url = `${SUPABASE_URL}/rest/v1/rpc/exec_sql`;
+  const props = PropertiesService.getScriptProperties();
+  const supabaseUrl = props.getProperty('SUPABASE_URL');
+  const supabaseKey = props.getProperty('SUPABASE_KEY');
+  
+  if (!supabaseUrl || !supabaseKey) {
+    return response({ status: 'error', message: 'Supabase credentials missing from script properties.' });
+  }
+
+  const url = `${supabaseUrl}/rest/v1/rpc/exec_sql`;
   const options = {
     method: 'post',
-    headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json' },
+    headers: { 'apikey': supabaseKey, 'Authorization': 'Bearer ' + supabaseKey, 'Content-Type': 'application/json' },
     payload: JSON.stringify({ "sql_query": sqlQuery }),
     muteHttpExceptions: true
   };

@@ -456,9 +456,11 @@ export const EditDealModal: React.FC<EditDealModalProps> = ({
     const [emailContent, setEmailContent] = useState("");
     const [emailSubject, setEmailSubject] = useState("");
     const [isSendingEmail, setIsSendingEmail] = useState(false);
+    const [emailStatus, setEmailStatus] = useState<{ type: 'error' | 'success', message: string } | null>(null);
     const [availableEmails, setAvailableEmails] = useState<SenderEmail[]>([]);
     const [selectedFromEmail, setSelectedFromEmail] = useState("");
     const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+    const [selectedAgentEmail, setSelectedAgentEmail] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchEmails = async () => {
@@ -555,6 +557,7 @@ Phone: (636) 486-6088`;
 
         setEmailSubject(subject);
         setEmailContent(body);
+        setSelectedAgentEmail(agent.email || null);
         setShowEmailModal(true);
         setSelectedTemplateId("");
     };
@@ -586,22 +589,34 @@ Phone: (636) 486-6088`;
     };
 
     const handleSendLOI = async () => {
-        if (!deal.agentEmail) {
-            alert("This agent does not have an email address set.");
+        const targetEmail = selectedAgentEmail || deal.agentEmail;
+        if (!targetEmail) {
+            setEmailStatus({ type: 'error', message: "This agent does not have an email address set." });
             return;
         }
         setIsSendingEmail(true);
+        setEmailStatus(null);
         try {
             const htmlBody = emailContent.replace(/\n/g, '<br/>');
-            const response = await sendBulkEmailGAS([deal.agentEmail], emailSubject, htmlBody, selectedFromEmail);
+            const response = await sendBulkEmailGAS([{ email: targetEmail, name: "Agent" }], emailSubject, htmlBody, selectedFromEmail);
             if (response && response.status === 'success') {
-                alert("LOI sent successfully!");
-                setShowEmailModal(false);
+                setEmailStatus({ type: 'success', message: "LOI sent successfully!" });
+                setTimeout(() => setShowEmailModal(false), 2000);
             } else {
-                alert("Failed to send LOI. " + (response?.error || response?.message || "Unknown error"));
+                let errorMsg = response?.error || response?.message || "Unknown error";
+                if (response?.errors && response.errors.length > 0) {
+                    errorMsg = response.errors[0].error;
+                }
+                let displayMsg = errorMsg;
+                if (errorMsg.includes("AWS Credentials missing")) {
+                    displayMsg = "AWS Credentials missing. Please configure AWS SES in the Settings -> Email section.";
+                } else if (errorMsg.includes("Email address is not verified")) {
+                    displayMsg = `The sender email (${selectedFromEmail}) is not verified in AWS SES.`;
+                }
+                setEmailStatus({ type: 'error', message: "Failed to send LOI. " + displayMsg });
             }
         } catch (e: any) {
-            alert("Error sending LOI: " + e.message);
+            setEmailStatus({ type: 'error', message: "Error sending LOI: " + e.message });
         } finally {
             setIsSendingEmail(false);
         }
@@ -1438,16 +1453,24 @@ Phone: (636) 486-6088`;
                             />
                         </div>
                     </div>
-                    <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
-                        <button onClick={() => setShowEmailModal(false)} className="px-4 py-2 rounded text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white text-sm">Close</button>
-                        <button 
-                            onClick={handleSendLOI} 
-                            disabled={isSendingEmail}
-                            className="bg-blue-600 hover:bg-blue-50 text-white px-6 py-2 rounded font-bold flex items-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            {isSendingEmail ? <Loader2 size={16} className="animate-spin" /> : <Send size={16}/>} 
-                            {isSendingEmail ? 'Sending...' : 'Send LOI'}
-                        </button>
+                    <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex flex-col gap-3">
+                        {emailStatus && (
+                            <div className={`p-3 rounded-lg text-sm font-medium flex items-start gap-2 ${emailStatus.type === 'error' ? 'bg-red-50 text-red-800 border border-red-200' : 'bg-green-50 text-green-800 border border-green-200'}`}>
+                                {emailStatus.type === 'error' ? <AlertTriangle size={16} className="mt-0.5 shrink-0" /> : <CheckCircle size={16} className="mt-0.5 shrink-0" />}
+                                <span>{emailStatus.message}</span>
+                            </div>
+                        )}
+                        <div className="flex justify-end gap-3">
+                            <button onClick={() => setShowEmailModal(false)} className="px-4 py-2 rounded text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white text-sm">Close</button>
+                            <button 
+                                onClick={handleSendLOI} 
+                                disabled={isSendingEmail}
+                                className="bg-blue-600 hover:bg-blue-50 text-white px-6 py-2 rounded font-bold flex items-center gap-2 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {isSendingEmail ? <Loader2 size={16} className="animate-spin" /> : <Send size={16}/>} 
+                                {isSendingEmail ? 'Sending...' : 'Send LOI'}
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>

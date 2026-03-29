@@ -70,45 +70,42 @@ const processIncomingItem = (item: any, tableName: string) => {
 };
 
 export const sendEmail = async (email: string, subject: string, body: string) => {
-    if (!GOOGLE_SCRIPT_URL) {
-        console.warn("No Google Script URL defined for emailing.");
-        return;
-    }
-    try {
-        await fetch(GOOGLE_SCRIPT_URL, {
-            method: 'POST',
-            body: JSON.stringify({
-                action: 'send_email',
-                recipient: email,
-                subject: subject,
-                body: body
-            }),
-            mode: 'no-cors' // Often needed for GAS web apps depending on deployment
-        });
-    } catch (e) {
-        console.error("Email send error:", e);
-    }
+    return sendBulkEmailGAS([{ email, name: "Recipient" }], subject, body);
 };
 
 export const sendBulkEmailGAS = async (recipients: any[], subject: string, body: string, fromAddress?: string) => {
     if (!GOOGLE_SCRIPT_URL) throw new Error("Script URL missing");
     
-    const response = await fetch(GOOGLE_SCRIPT_URL, {
-        method: 'POST',
-        body: JSON.stringify({
-            action: 'send_bulk_email',
-            data: {
-                recipients: recipients,
-                subject: subject,
-                body: body,
-                fromAddress: fromAddress
-            }
-        })
-    });
-    
-    // GAS often returns opaque responses with no-cors, but if we use cors:
-    const data = await response.json();
-    return data;
+    try {
+        const response = await fetch(GOOGLE_SCRIPT_URL, {
+            method: 'POST',
+            headers: { "Content-Type": "text/plain" },
+            body: JSON.stringify({
+                action: 'send_bulk_email',
+                data: {
+                    recipients: recipients,
+                    subject: subject,
+                    body: body,
+                    fromAddress: fromAddress
+                }
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        try {
+            const data = await response.json();
+            return data;
+        } catch (parseError) {
+            console.error("Could not parse GAS response. The script might require authentication or the URL is incorrect.", parseError);
+            throw new Error("Invalid response from Google Apps Script. Ensure the script is deployed to execute as 'Me' and accessible to 'Anyone'.");
+        }
+    } catch (e: any) {
+        console.error("sendBulkEmailGAS error:", e);
+        return { status: 'error', message: e.message || String(e) };
+    }
 };
 
 export const executeAdminSql = async (query: string) => {

@@ -12,10 +12,7 @@ export const SettingsEmail: React.FC = () => {
     
     const [config, setConfig] = useState({
         enabled: true,
-        region: 'us-east-2',
-        sourceEmail: '',
-        accessKey: '',
-        secretKey: ''
+        sourceEmail: ''
     });
 
     const [availableEmails, setAvailableEmails] = useState<SenderEmail[]>([]);
@@ -25,10 +22,8 @@ export const SettingsEmail: React.FC = () => {
         setIsLoading(true);
         console.log("🔄 Fetching AWS Config...");
         try {
-            const res = await fetch(GOOGLE_SCRIPT_URL, {
-                method: 'POST',
-                body: JSON.stringify({ action: 'get_aws_config' }),
-                headers: { "Content-Type": "text/plain" }
+            const res = await fetch(`${GOOGLE_SCRIPT_URL}?action=get_aws_config`, {
+                method: 'GET',
             });
 
             if (!res.ok) throw new Error('Network response was not ok');
@@ -41,10 +36,7 @@ export const SettingsEmail: React.FC = () => {
                 const d = responseData.data;
                 setConfig(prev => ({ 
                     ...prev, 
-                    region: d.region || 'us-east-2',
                     sourceEmail: d.sourceEmail || '',
-                    accessKey: d.accessKey || '',
-                    secretKey: d.secretKey || '', 
                     enabled: d.enabled !== false
                 }));
             } else {
@@ -221,7 +213,7 @@ export const SettingsEmail: React.FC = () => {
                     <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-500 flex items-center gap-2">
                         <Globe size={14} /> Service Configuration
                     </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 gap-6">
                         <div>
                             <label className="text-[10px] text-gray-500 dark:text-gray-400 uppercase font-bold mb-1.5 block">Sender Identity (From Email)</label>
                             <input 
@@ -232,47 +224,6 @@ export const SettingsEmail: React.FC = () => {
                                 placeholder="e.g. deals@asharizakargroup.com"
                             />
                             <p className="text-[10px] text-gray-500 mt-1">This email must be a <b>Verified Identity</b> in your AWS SES dashboard.</p>
-                        </div>
-                        <div>
-                            <label className="text-[10px] text-gray-500 dark:text-gray-400 uppercase font-bold mb-1.5 block">AWS Region</label>
-                            <select 
-                                className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 text-gray-900 dark:text-white text-sm focus:border-blue-500 outline-none transition-colors appearance-none"
-                                value={config.region}
-                                onChange={e => handleChange('region', e.target.value)}
-                            >
-                                <option value="us-east-1">US East (N. Virginia)</option>
-                                <option value="us-east-2">US East (Ohio)</option>
-                                <option value="us-west-2">US West (Oregon)</option>
-                                <option value="eu-west-1">Europe (Ireland)</option>
-                            </select>
-                        </div>
-                    </div>
-                </section>
-
-                {/* Credentials Section */}
-                <section className="space-y-4">
-                    <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-500 flex items-center gap-2">
-                        <Key size={14} /> API Credentials (IAM)
-                    </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <label className="text-[10px] text-gray-500 dark:text-gray-400 uppercase font-bold mb-1.5 block">Access Key ID</label>
-                            <input 
-                                className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 text-gray-900 dark:text-white text-sm focus:border-blue-500 outline-none transition-colors font-mono" 
-                                value={config.accessKey} 
-                                onChange={e => handleChange('accessKey', e.target.value)}
-                                placeholder="AKIA..."
-                            />
-                        </div>
-                        <div>
-                            <label className="text-[10px] text-gray-500 dark:text-gray-400 uppercase font-bold mb-1.5 block">Secret Access Key</label>
-                            <input 
-                                type="password"
-                                className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-2.5 text-gray-900 dark:text-white text-sm focus:border-blue-500 outline-none transition-colors font-mono" 
-                                value={config.secretKey} 
-                                onChange={e => handleChange('secretKey', e.target.value)}
-                                placeholder="••••••••••••••••••••••••••••••••"
-                            />
                         </div>
                     </div>
                 </section>
