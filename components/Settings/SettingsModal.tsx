@@ -1,7 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { X, User, Home, Users, Layout, Save, LogOut, Upload, FileSpreadsheet, Download, Moon, Sun, Monitor, RefreshCw, Loader2, Database, Mail, Chrome, Image as ImageIcon, Wand2, Link } from 'lucide-react';
 import { User as UserType } from '../../types';
+import JoditEditor from 'jodit-react';
 import { SettingsEmail } from './SettingsEmail';
 import { DatabaseAdmin } from './DatabaseAdmin';
 import { ChromePluginSettings } from './ChromePluginSettings';
@@ -236,7 +237,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                     <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
                         {activeTab === 'users' && (
-                            <div className="space-y-8 max-w-lg">
+                            <div className="space-y-8 max-w-2xl">
                                 <div className="flex items-center gap-6">
                                     <div className="w-20 h-20 rounded-full bg-gray-100 dark:bg-gray-800 border-4 border-gray-200 dark:border-gray-700 overflow-hidden relative group shrink-0 shadow-inner">
                                         {editedUser.photo ? (
@@ -280,6 +281,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                         <div>
                                             <label className="text-xs text-gray-500 dark:text-gray-400 uppercase font-bold mb-1.5 block">Confirm Password</label>
                                             <input type="password" className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-3 text-gray-900 dark:text-white text-sm focus:border-blue-500 outline-none transition-colors" placeholder="•••••••••••" value={editedUser.confirmPassword} onChange={e => setEditedUser({...editedUser, confirmPassword: e.target.value})} />
+                                        </div>
+                                    </div>
+                                    
+                                    <div>
+                                        <label className="text-xs text-gray-500 dark:text-gray-400 uppercase font-bold mb-1.5 block">Email Signature</label>
+                                        <div className="bg-white dark:bg-gray-800 rounded-lg overflow-hidden border border-gray-300 dark:border-gray-700">
+                                            <JoditEditor
+                                                value={editedUser.signature || ''}
+                                                config={{
+                                                    readonly: false,
+                                                    toolbar: true,
+                                                    theme: 'default',
+                                                    height: 250,
+                                                }}
+                                                onBlur={newContent => setEditedUser({...editedUser, signature: newContent})}
+                                            />
                                         </div>
                                     </div>
                                 </div>

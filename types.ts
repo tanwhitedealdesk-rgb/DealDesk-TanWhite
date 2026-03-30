@@ -107,6 +107,7 @@ export interface Deal {
   photos?: string[];
   picturesFolderId?: string; // New Field for Drive Folder ID
   excludeStreetView?: boolean;
+  loiSent?: boolean;
 }
 
 export interface Agent {

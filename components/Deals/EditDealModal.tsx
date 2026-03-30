@@ -63,6 +63,7 @@ const AgentSlot: React.FC<{
     agentId?: string;
     agentName?: string;
     agent?: Agent; 
+    deal?: Deal;
     allAgents: Agent[];
     onSelect: (agent: Agent) => void;
     onClear: () => void;
@@ -73,7 +74,7 @@ const AgentSlot: React.FC<{
     onGenerateEmail?: (agent: Agent) => void;
     onAddNewAgent?: (name?: string) => void;
     onBlur?: () => void;
-}> = ({ slotIndex, agent, allAgents, onSelect, onClear, onViewProfile, onUpdate, customNameValue, onCustomNameChange, onGenerateEmail, onAddNewAgent, onBlur }) => {
+}> = ({ slotIndex, agent, deal, allAgents, onSelect, onClear, onViewProfile, onUpdate, customNameValue, onCustomNameChange, onGenerateEmail, onAddNewAgent, onBlur }) => {
     
     const [searchTerm, setSearchTerm] = useState("");
     const [showDropdown, setShowDropdown] = useState(false);
@@ -141,7 +142,7 @@ const AgentSlot: React.FC<{
                         </div>
                         
                         {onGenerateEmail && (
-                            <div className="pt-2">
+                            <div className="pt-2 flex items-center gap-2">
                                 <button 
                                     type="button" 
                                     onClick={() => onGenerateEmail(agent)}
@@ -149,6 +150,11 @@ const AgentSlot: React.FC<{
                                 >
                                     <Send size={12} /> Send LOI
                                 </button>
+                                {deal.loiSent && (
+                                    <span className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800 text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wider flex items-center gap-1">
+                                        <CheckCircle size={10} /> LOI Sent
+                                    </span>
+                                )}
                             </div>
                         )}
                     </div>
@@ -527,7 +533,7 @@ export const EditDealModal: React.FC<EditDealModalProps> = ({
         const emdStr = deal.offerPrice ? formatCurrency(emdVal) : "[1% of Offer Price]";
         
         const subject = `Cash Offer! - ${deal.address}`;
-        const body = `Hi ${agentFirstName},
+        let body = `Hi ${agentFirstName},
 
 Thanks so much for taking the time to list this property and provide all of the pictures and details. We’ve reviewed everything and would like to formally submit an offer based on our numbers below.
 
@@ -554,6 +560,10 @@ Ashari Zakar
 Ashari Zakar Real Estate, LLC
 Email: ${selectedFromEmail}
 Phone: (636) 486-6088`;
+
+        if (currentUser?.signature) {
+            body += `\n\n${currentUser.signature}`;
+        }
 
         setEmailSubject(subject);
         setEmailContent(body);
@@ -584,6 +594,10 @@ Phone: (636) 486-6088`;
                        .replace(/\{\{Your_Phone\}\}/g, "(636) 486-6088")
                        .replace(/\{\{Your_Address\}\}/g, "Ashari Zakar Real Estate, LLC");
 
+            if (currentUser?.signature) {
+                body += `\n\n${currentUser.signature}`;
+            }
+
             setEmailContent(body);
         }
     };
@@ -601,6 +615,14 @@ Phone: (636) 486-6088`;
             const response = await sendBulkEmailGAS([{ email: targetEmail, name: "Agent" }], emailSubject, htmlBody, selectedFromEmail);
             if (response && response.status === 'success') {
                 setEmailStatus({ type: 'success', message: "LOI sent successfully!" });
+                
+                // Update the deal to mark LOI as sent
+                updateDealState({ loiSent: true });
+                if (onUpdate) {
+                    onUpdate(deal.id, { loiSent: true });
+                }
+                triggerSave();
+
                 setTimeout(() => setShowEmailModal(false), 2000);
             } else {
                 let errorMsg = response?.error || response?.message || "Unknown error";
@@ -1106,8 +1128,8 @@ Phone: (636) 486-6088`;
                                 {agent1 && <button type="button" onClick={() => onViewAgent(agent1.id)} className="text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors flex items-center gap-1">Profile <ArrowRight size={10} className="-rotate-45"/></button>}
                             </div>
                             <div className="space-y-3">
-                                <AgentSlot slotIndex={1} agent={agent1} allAgents={agents} onSelect={handleSelectAgent1} onClear={handleClearAgent1} onViewProfile={(agent) => onViewAgent(agent.id)} onUpdate={onUpdateAgent} customNameValue={deal.agentName} onCustomNameChange={(val) => updateDealState({agentName: val})} onGenerateEmail={handleGenerateEmail} onAddNewAgent={onAddNewAgent} onBlur={handleAutoSave} />
-                                <AgentSlot slotIndex={2} agent={agent2} allAgents={agents} onSelect={handleSelectAgent2} onClear={() => { updateDealState({secondAgentId: undefined}); triggerSave(); }} onViewProfile={(agent) => onViewAgent(agent.id)} onUpdate={onUpdateAgent} onGenerateEmail={handleGenerateEmail} onAddNewAgent={onAddNewAgent} onBlur={handleAutoSave} />
+                                <AgentSlot slotIndex={1} agent={agent1} deal={deal} allAgents={agents} onSelect={handleSelectAgent1} onClear={handleClearAgent1} onViewProfile={(agent) => onViewAgent(agent.id)} onUpdate={onUpdateAgent} customNameValue={deal.agentName} onCustomNameChange={(val) => updateDealState({agentName: val})} onGenerateEmail={handleGenerateEmail} onAddNewAgent={onAddNewAgent} onBlur={handleAutoSave} />
+                                <AgentSlot slotIndex={2} agent={agent2} deal={deal} allAgents={agents} onSelect={handleSelectAgent2} onClear={() => { updateDealState({secondAgentId: undefined}); triggerSave(); }} onViewProfile={(agent) => onViewAgent(agent.id)} onUpdate={onUpdateAgent} onGenerateEmail={handleGenerateEmail} onAddNewAgent={onAddNewAgent} onBlur={handleAutoSave} />
                             </div>
                         </div>
 
