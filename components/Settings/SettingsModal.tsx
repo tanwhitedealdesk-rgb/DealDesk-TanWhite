@@ -292,7 +292,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                                 config={{
                                                     readonly: false,
                                                     toolbar: true,
-                                                    theme: 'default',
+                                                    theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default',
                                                     height: 250,
                                                 }}
                                                 onBlur={newContent => setEditedUser({...editedUser, signature: newContent})}

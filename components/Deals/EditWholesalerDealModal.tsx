@@ -5,6 +5,7 @@ import { api, sendBulkEmailGAS } from '../../services/api';
 import { Deal, Wholesaler, Brokerage, Comparable, User as UserType, Buyer } from '../../types';
 import { formatNumberWithCommas, parseNumberFromCurrency, formatPhoneNumber, getLogTimestamp, formatCurrency, calculateDaysRemaining, serverFunctions, processPhotoUrl, loadGoogleMapsScript } from '../../services/utils';
 import { SenderEmail } from '../../types';
+import JoditEditor from 'jodit-react';
 import { mockOfferTemplates } from '../../services/mockData';
 import { ModalFooter, NavigationArrows, UnsavedChangesModal } from '../Shared/ModalComponents';
 import { useAutoSave, SavedNotification } from '../Shared/AutoSave';
@@ -532,33 +533,11 @@ export const EditWholesalerDealModal: React.FC<EditWholesalerDealModalProps> = (
         const emdStr = deal.offerPrice ? formatCurrency(emdVal) : "[1% of Offer Price]";
         
         const subject = `Cash Offer! - ${deal.address}`;
-        const body = `Hi ${agentFirstName},
+        let body = `<div>Hi ${agentFirstName},</div><div><br></div><div>Thanks so much for taking the time to list this property and provide all of the pictures and details. We’ve reviewed everything and would like to formally submit an offer based on our numbers below.</div><div><br></div><div>Our offer is based on careful underwriting, recent comps, and expected renovation costs. We’re not here to waste anyone’s time with lowball tactics — this is a serious, as-is cash offer with clean terms.</div><div><br></div><div><strong>Address:</strong> ${deal.address}</div><div><strong>Offer Amount:</strong> ${offerPriceStr}</div><div><strong>Earnest Money Deposit:</strong> 1% (${emdStr})</div><div><strong>Due Diligence Period:</strong> 10 days</div><div><strong>Closing Timeline:</strong> 30 days or sooner</div><div><strong>Closing Attorney:</strong> Lueder, Larkin and Hunter - Douglasville</div><div><strong>Contingencies:</strong> None – we’re buying as-is</div><div><strong>Buyer:</strong> Ashari Zakar Real Estate, LLC (AZRE)</div><div><br></div><div>You can <a href="http://terms.asharizakargroup.com/">click here</a> to view our full Purchase Terms Sheet</div><div><br></div><div>I’d love the opportunity to do a quick walkthrough with our contractor to confirm the renovation budget. Once we have that, we’re ready to move fast and get this across the line.</div><div><br></div><div>Let me know if this is in range for the seller. Either way, thanks again for the opportunity, and I hope we can work together on this one (and more down the line).</div>`;
 
-Thanks so much for taking the time to list this property and provide all of the pictures and details. We’ve reviewed everything and would like to formally submit an offer based on our numbers below.
-
-Our offer is based on careful underwriting, recent comps, and expected renovation costs. We’re not here to waste anyone’s time with lowball tactics — this is a serious, as-is cash offer with clean terms.
-
-Address: ${deal.address}
-Offer Amount: ${offerPriceStr}
-Earnest Money Deposit: 1% (${emdStr})
-Due Diligence Period: 10 days
-Closing Timeline: 30 days or sooner
-Closing Attorney: Lueder, Larkin and Hunter - Douglasville
-Contingencies: None – we’re buying as-is
-Buyer: Ashari Zakar Real Estate, LLC (AZRE)
-
-You can view our full Purchase Terms Sheet here: http://terms1.asharizakargroup.com/
-
-I’d love the opportunity to do a quick walkthrough with our contractor to confirm the renovation budget. Once we have that, we’re ready to move fast and get this across the line.
-
-Let me know if this is in range for the seller. Either way, thanks again for the opportunity, and I hope we can work together on this one (and more down the line).
-
-Best,
-
-Ashari Zakar
-Ashari Zakar Real Estate, LLC
-Email: ${selectedFromEmail}
-Phone: (636) 486-6088`;
+        if (currentUser?.signature) {
+            body += `<br/><br/>${currentUser.signature}`;
+        }
 
         setEmailSubject(subject);
         setEmailContent(body);
@@ -579,7 +558,7 @@ Phone: (636) 486-6088`;
             
             let body = template.emailBody || "";
             if (template.loiBody) {
-                body += `\n\n---\n\n${template.loiBody}`;
+                body += `<br/><br/>---<br/><br/>${template.loiBody}`;
             }
 
             body = body.replace(/\{\{Agent_Name\}\}/g, agentName)
@@ -588,6 +567,12 @@ Phone: (636) 486-6088`;
                        .replace(/\{\{Offer_Amount\}\}/g, offerPriceStr)
                        .replace(/\{\{Your_Phone\}\}/g, "(636) 486-6088")
                        .replace(/\{\{Your_Address\}\}/g, "Ashari Zakar Real Estate, LLC");
+
+            body = body.replace(/\n/g, '<br/>');
+
+            if (currentUser?.signature) {
+                body += `<br/><br/>${currentUser.signature}`;
+            }
 
             setEmailContent(body);
         }
@@ -602,7 +587,7 @@ Phone: (636) 486-6088`;
         setIsSendingEmail(true);
         setEmailStatus(null);
         try {
-            const htmlBody = emailContent.replace(/\n/g, '<br/>');
+            let htmlBody = emailContent;
             const response = await sendBulkEmailGAS([{ email: targetEmail, name: "Wholesaler" }], emailSubject, htmlBody, selectedFromEmail);
             if (response && response.status === 'success') {
                 setEmailStatus({ type: 'success', message: "LOI sent successfully!" });
@@ -1408,7 +1393,7 @@ Phone: (636) 486-6088`;
 
           {showEmailModal && (
             <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={(e) => e.stopPropagation()}>
-                <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl max-w-2xl w-full flex flex-col max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+                <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl max-w-5xl w-full flex flex-col h-[95vh] max-h-[95vh]" onClick={(e) => e.stopPropagation()}>
                     <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex justify-between items-center">
                         <h3 className="text-lg font-bold text-gray-900 dark:text-white">Send LOI</h3>
                         <button onClick={() => setShowEmailModal(false)} className="text-gray-400 hover:text-gray-900 dark:hover:text-white"><X size={20}/></button>
@@ -1451,11 +1436,19 @@ Phone: (636) 486-6088`;
                         </div>
                         <div className="flex-1 flex flex-col">
                             <label className="text-xs text-gray-500 block mb-1 uppercase font-bold">Email Body</label>
-                            <textarea 
-                                className="w-full flex-1 min-h-[300px] bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded p-3 text-gray-900 dark:text-white text-sm font-mono leading-relaxed outline-none resize-none focus:border-blue-500"
-                                value={emailContent}
-                                onChange={(e) => setEmailContent(e.target.value)}
-                            />
+                            <div className="w-full flex-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded overflow-hidden flex flex-col">
+                                <JoditEditor
+                                    value={emailContent}
+                                    config={{
+                                        readonly: false,
+                                        toolbar: true,
+                                        theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default',
+                                        height: 600,
+                                        enter: "DIV",
+                                    }}
+                                    onBlur={newContent => setEmailContent(newContent)}
+                                />
+                            </div>
                         </div>
                     </div>
                     <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex flex-col gap-3">
