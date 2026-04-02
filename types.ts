@@ -36,6 +36,7 @@ export interface User {
 export interface DispoSettings {
   photos: boolean;
   blast: boolean;
+  loiSentAgents?: string[];
 }
 
 export interface Comparable {
@@ -108,6 +109,7 @@ export interface Deal {
   picturesFolderId?: string; // New Field for Drive Folder ID
   excludeStreetView?: boolean;
   loiSent?: boolean;
+  loiSentDate?: string | null;
 }
 
 export interface Agent {

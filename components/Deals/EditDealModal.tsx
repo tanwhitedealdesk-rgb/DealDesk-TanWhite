@@ -151,9 +151,9 @@ const AgentSlot: React.FC<{
                                 >
                                     <Send size={12} /> Send LOI
                                 </button>
-                                {deal.loiSent && (
+                                {(deal?.dispo?.loiSentAgents?.includes(agent.id) || (deal?.loiSent && deal?.agentName && agent?.name && deal.agentName.toLowerCase() === agent.name.toLowerCase())) && (
                                     <span className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800 text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wider flex items-center gap-1">
-                                        <CheckCircle size={10} /> LOI Sent
+                                        <CheckCircle size={10} /> LOI Sent {deal?.loiSentDate ? `(${new Date(deal.loiSentDate).toLocaleDateString()})` : ''}
                                     </span>
                                 )}
                             </div>
@@ -468,6 +468,7 @@ export const EditDealModal: React.FC<EditDealModalProps> = ({
     const [selectedFromEmail, setSelectedFromEmail] = useState("");
     const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
     const [selectedAgentEmail, setSelectedAgentEmail] = useState<string | null>(null);
+    const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchEmails = async () => {
@@ -543,6 +544,7 @@ export const EditDealModal: React.FC<EditDealModalProps> = ({
         setEmailSubject(subject);
         setEmailContent(body);
         setSelectedAgentEmail(agent.email || null);
+        setSelectedAgentId(agent.id);
         setShowEmailModal(true);
         setSelectedTemplateId("");
     };
@@ -593,10 +595,41 @@ export const EditDealModal: React.FC<EditDealModalProps> = ({
             if (response && response.status === 'success') {
                 setEmailStatus({ type: 'success', message: "LOI sent successfully!" });
                 
-                // Update the deal to mark LOI as sent
-                updateDealState({ loiSent: true });
+                // Update the agent's email if it was changed in the modal
+                const currentAgent = agents.find(a => a.id === selectedAgentId);
+                if (currentAgent && selectedAgentEmail && currentAgent.email !== selectedAgentEmail) {
+                    if (onUpdateAgent) {
+                        onUpdateAgent(currentAgent.id, { email: selectedAgentEmail });
+                    }
+                }
+
+                const now = new Date().toISOString();
+                const newLoiSentAgents = [...(deal.dispo?.loiSentAgents || [])];
+                if (selectedAgentId && !newLoiSentAgents.includes(selectedAgentId)) {
+                    newLoiSentAgents.push(selectedAgentId);
+                }
+
+                const logMessage = `[${new Date().toLocaleString()}] Sent LOI to ${currentAgent ? currentAgent.name : 'Agent'} (${targetEmail})`;
+                const newLogs = [...(deal.logs || []), logMessage];
+
+                const updates: Partial<Deal> = { 
+                    loiSent: true,
+                    loiSentDate: now,
+                    logs: newLogs,
+                    dispo: {
+                        ...(deal.dispo || { photos: false, blast: false }),
+                        loiSentAgents: newLoiSentAgents
+                    }
+                };
+
+                // If this is agent1, also update deal.agentEmail
+                if (currentAgent && currentAgent.name === deal.agentName && selectedAgentEmail && currentAgent.email !== selectedAgentEmail) {
+                    updates.agentEmail = selectedAgentEmail;
+                }
+
+                updateDealState(updates);
                 if (onUpdate) {
-                    onUpdate(deal.id, { loiSent: true });
+                    onUpdate(deal.id, updates);
                 }
                 triggerSave();
 
@@ -1435,13 +1468,24 @@ export const EditDealModal: React.FC<EditDealModalProps> = ({
                                 </select>
                             </div>
                         </div>
-                        <div>
-                            <label className="text-xs text-gray-500 block mb-1 uppercase font-bold">Subject Line</label>
-                            <input 
-                                className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded p-2 text-gray-900 dark:text-white text-sm"
-                                value={emailSubject}
-                                onChange={(e) => setEmailSubject(e.target.value)}
-                            />
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="text-xs text-gray-500 block mb-1 uppercase font-bold">To Email</label>
+                                <input 
+                                    className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded p-2 text-gray-900 dark:text-white text-sm"
+                                    value={selectedAgentEmail || ''}
+                                    onChange={(e) => setSelectedAgentEmail(e.target.value)}
+                                    placeholder="agent@example.com"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs text-gray-500 block mb-1 uppercase font-bold">Subject Line</label>
+                                <input 
+                                    className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded p-2 text-gray-900 dark:text-white text-sm"
+                                    value={emailSubject}
+                                    onChange={(e) => setEmailSubject(e.target.value)}
+                                />
+                            </div>
                         </div>
                         <div className="flex-1 flex flex-col">
                             <label className="text-xs text-gray-500 block mb-1 uppercase font-bold">Email Body</label>
