@@ -2,7 +2,8 @@
 import React, { useState, useRef } from 'react';
 import { X, User, Home, Users, Layout, Save, LogOut, Upload, FileSpreadsheet, Download, Moon, Sun, Monitor, RefreshCw, Loader2, Database, Mail, Chrome, Image as ImageIcon, Wand2, Link } from 'lucide-react';
 import { User as UserType } from '../../types';
-import JoditEditor from 'jodit-react';
+import ReactQuill from 'react-quill-new';
+import 'react-quill-new/dist/quill.snow.css';
 import { SettingsEmail } from './SettingsEmail';
 import { DatabaseAdmin } from './DatabaseAdmin';
 import { ChromePluginSettings } from './ChromePluginSettings';
@@ -287,15 +288,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                     <div>
                                         <label className="text-xs text-gray-500 dark:text-gray-400 uppercase font-bold mb-1.5 block">Email Signature</label>
                                         <div className="bg-white dark:bg-gray-800 rounded-lg overflow-hidden border border-gray-300 dark:border-gray-700">
-                                            <JoditEditor
+                                            <ReactQuill
+                                                theme="snow"
                                                 value={editedUser.signature || ''}
-                                                config={{
-                                                    readonly: false,
-                                                    toolbar: true,
-                                                    theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default',
-                                                    height: 250,
-                                                }}
-                                                onBlur={newContent => setEditedUser({...editedUser, signature: newContent})}
+                                                onChange={newContent => setEditedUser({...editedUser, signature: newContent})}
+                                                className="h-[200px] mb-10"
                                             />
                                         </div>
                                     </div>

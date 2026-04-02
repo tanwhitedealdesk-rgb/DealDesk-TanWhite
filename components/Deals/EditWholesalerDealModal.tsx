@@ -5,7 +5,8 @@ import { api, sendBulkEmailGAS } from '../../services/api';
 import { Deal, Wholesaler, Brokerage, Comparable, User as UserType, Buyer } from '../../types';
 import { formatNumberWithCommas, parseNumberFromCurrency, formatPhoneNumber, getLogTimestamp, formatCurrency, calculateDaysRemaining, serverFunctions, processPhotoUrl, loadGoogleMapsScript } from '../../services/utils';
 import { SenderEmail } from '../../types';
-import JoditEditor from 'jodit-react';
+import ReactQuill from 'react-quill-new';
+import 'react-quill-new/dist/quill.snow.css';
 import { mockOfferTemplates } from '../../services/mockData';
 import { ModalFooter, NavigationArrows, UnsavedChangesModal } from '../Shared/ModalComponents';
 import { useAutoSave, SavedNotification } from '../Shared/AutoSave';
@@ -1437,16 +1438,11 @@ export const EditWholesalerDealModal: React.FC<EditWholesalerDealModalProps> = (
                         <div className="flex-1 flex flex-col">
                             <label className="text-xs text-gray-500 block mb-1 uppercase font-bold">Email Body</label>
                             <div className="w-full flex-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded overflow-hidden flex flex-col">
-                                <JoditEditor
+                                <ReactQuill
+                                    theme="snow"
                                     value={emailContent}
-                                    config={{
-                                        readonly: false,
-                                        toolbar: true,
-                                        theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default',
-                                        height: 600,
-                                        enter: "DIV",
-                                    }}
-                                    onBlur={newContent => setEmailContent(newContent)}
+                                    onChange={setEmailContent}
+                                    className="h-[550px] mb-10"
                                 />
                             </div>
                         </div>
