@@ -99,9 +99,22 @@ export const BuyerCard: React.FC<BuyerCardProps> = ({ buyer, onEdit, onDelete, o
                     )}
                 </div>
 
-                <div className="absolute bottom-2 left-2 bg-white/90 dark:bg-black/60 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 backdrop-blur-sm shadow-sm border border-gray-200 dark:border-gray-700">
-                    <Briefcase size={10} className="text-blue-600 dark:text-blue-400" />
-                    <span className="text-gray-800 dark:text-white">{buyer.propertiesBought} Bought</span>
+                <div className="absolute bottom-2 left-2 flex items-center gap-1.5 flex-wrap max-w-[85%]">
+                    <div className="bg-white/90 dark:bg-black/60 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 backdrop-blur-sm shadow-sm border border-gray-200 dark:border-gray-700">
+                        <Briefcase size={10} className="text-blue-600 dark:text-blue-400" />
+                        <span className="text-gray-800 dark:text-white">{buyer.propertiesBought} Bought</span>
+                    </div>
+                    {buyer.buyBox?.propertyTypes?.map(type => {
+                        let colorClass = 'bg-gray-500 text-white border-gray-400';
+                        if (type === 'Renovation') colorClass = 'bg-blue-600 text-white border-blue-500';
+                        if (type === 'New Build') colorClass = 'bg-green-600 text-white border-green-500';
+                        if (type === 'Rental') colorClass = 'bg-purple-600 text-white border-purple-500';
+                        return (
+                            <div key={type} className={`px-2 py-0.5 rounded text-[10px] font-bold shadow-sm border ${colorClass}`}>
+                                {type}
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
 
