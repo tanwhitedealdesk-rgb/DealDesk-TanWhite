@@ -280,6 +280,9 @@ export const EditDealModal: React.FC<EditDealModalProps> = ({
     const [showGoogleSuggestions, setShowGoogleSuggestions] = useState(false);
     const [mapsLoaded, setMapsLoaded] = useState(false);
     
+    // Buyer Analytics State
+    const [interestedSearchQuery, setInterestedSearchQuery] = useState("");
+    
     // Services Ref
     const autocompleteService = useRef<any>(null);
 
@@ -375,6 +378,211 @@ export const EditDealModal: React.FC<EditDealModalProps> = ({
         const newData = { ...deal, ...updates };
         dealRef.current = newData; 
         setDeal(newData); 
+    };
+
+    // --- BUYER ANALYTICS LOGIC ---
+    const matchedBuyers = useMemo(() => {
+        const dealZip = deal.address.match(/\d{5}/)?.[0] || "";
+        const dealSubMarket = (deal.subMarket || "").toLowerCase().trim();
+        const dealCounty = (deal.county || "").toLowerCase().trim();
+        const dealNeighborhood = (deal.neighborhood || "").toLowerCase().trim();
+        
+        const dealPrice = deal.listPrice || 0;
+        const dealArv = deal.arv || 0;
+        const dealReno = deal.renovationEstimate || 0;
+        const dealSqft = deal.sqft || 0;
+        const dealYear = deal.yearBuilt || 0;
+        
+        const dealStrategies = (deal.dealType || []).map(s => {
+            let low = s.toLowerCase();
+            return low === 'new construction' ? 'new build' : low;
+        }).filter(Boolean);
+
+        return buyers.map(buyer => {
+            const bb = buyer.buyBox;
+            const reasons: string[] = [];
+            let matchScore = 0;
+
+            if (!bb) return { buyer, matchScore: 0, reasons: [] as string[] };
+            
+            const minArv = bb.minArv || 0;
+            if (minArv > 0 && dealArv < minArv) return { buyer, matchScore: 0, reasons: [] as string[] };
+
+            const maxArv = bb.maxArv || 0;
+            if (maxArv > 0 && dealArv > maxArv) return { buyer, matchScore: 0, reasons: [] as string[] };
+
+            const maxReno = bb.maxRenoBudget || 0;
+            if (maxReno > 0 && dealReno > maxReno) return { buyer, matchScore: 0, reasons: [] as string[] };
+
+            const minSqft = bb.minSqft || 0;
+            const maxSqft = bb.maxSqft || 0;
+            if (dealSqft > 0) {
+                if (minSqft > 0 && dealSqft < minSqft) return { buyer, matchScore: 0, reasons: [] as string[] };
+                if (maxSqft > 0 && dealSqft > maxSqft) return { buyer, matchScore: 0, reasons: [] as string[] };
+            }
+
+            const earliestYear = bb.earliestYearBuilt || 0;
+            const latestYear = bb.latestYearBuilt || 0;
+            if (dealYear > 0) {
+                if (earliestYear > 0 && dealYear < earliestYear) return { buyer, matchScore: 0, reasons: [] as string[] };
+                if (latestYear > 0 && dealYear > latestYear) return { buyer, matchScore: 0, reasons: [] as string[] };
+            }
+
+            const locationsLower = (bb.locations || "").toLowerCase();
+            const buyerZips: string[] = locationsLower.match(/\d{5}/g) || [];
+            let isLocationMatch = false;
+
+            if (buyerZips.length > 0) {
+                if (dealZip && buyerZips.includes(dealZip)) {
+                    const neighborhoodTags = locationsLower.split(',')
+                        .map(loc => loc.trim())
+                        .filter(loc => loc !== "" && isNaN(Number(loc)) && !loc.includes('county'));
+
+                    if (neighborhoodTags.length > 0) {
+                        const hasDirectNeighborhoodMatch = neighborhoodTags.includes(dealNeighborhood);
+                        isLocationMatch = hasDirectNeighborhoodMatch || !locationsLower.includes(dealNeighborhood);
+                    } else {
+                        isLocationMatch = true;
+                    }
+                }
+            } 
+            else if (dealCounty && locationsLower.includes(dealCounty)) {
+                isLocationMatch = true;
+            }
+
+            if (!isLocationMatch) return { buyer, matchScore: 0, reasons: [] as string[] }; 
+            
+            matchScore += 3; 
+            reasons.push("Location Match");
+
+            const buyerStrategies = (bb.propertyTypes || []).map(t => t.toLowerCase()).filter(Boolean);
+            const strategyIntersection = dealStrategies.filter(s => buyerStrategies.includes(s));
+            const isStrategyMatch = dealStrategies.length === 0 || buyerStrategies.length === 0 || strategyIntersection.length > 0;
+
+            if (!isStrategyMatch) return { buyer, matchScore: 0, reasons: [] as string[] }; 
+
+            if (strategyIntersection.length > 0) {
+                matchScore += 2;
+                reasons.push(`Strategy Match (${strategyIntersection.join(', ')})`);
+            } else if (buyerStrategies.length === 0) {
+                matchScore += 1;
+                reasons.push("Broad Strategy Buyer");
+            }
+
+            const priceMin = bb.minPrice || 0;
+            const priceMax = bb.maxPrice || Infinity;
+            const isPriceMatch = dealPrice >= priceMin && (priceMax === 0 || dealPrice <= priceMax);
+            
+            if (isPriceMatch && dealPrice > 0) {
+                matchScore += 2;
+                reasons.push("Budget Match");
+            } else if (dealPrice > 0 && !isPriceMatch) {
+                matchScore -= 1; 
+            }
+
+            if ((minArv > 0 && dealArv >= minArv) || (maxArv > 0 && dealArv <= maxArv)) {
+                matchScore += 1;
+                reasons.push("ARV Match");
+            }
+
+            if (maxReno > 0 && dealReno <= maxReno) {
+                matchScore += 1;
+                reasons.push("Reno Budget Match");
+            }
+
+            if (dealYear > 0 && (earliestYear > 0 || latestYear > 0)) {
+                matchScore += 1;
+                reasons.push("Year Built Match");
+            }
+
+            const bedMatch = deal.bedrooms ? deal.bedrooms >= (bb.minBedrooms || 0) : true;
+            const bathMatch = deal.bathrooms ? deal.bathrooms >= (bb.minBathrooms || 0) : true;
+            
+            if (bedMatch && bathMatch && (deal.bedrooms || deal.bathrooms)) {
+                matchScore += 1;
+                reasons.push("Specs Match");
+            }
+
+            return { buyer, matchScore, reasons };
+        })
+        .filter(m => m.matchScore > 0) 
+        .sort((a, b) => b.matchScore - a.matchScore)
+        .map(m => m.buyer);
+    }, [deal, buyers]);
+
+    const availableMatchedBuyers = useMemo(() => {
+        const interestedIds = (deal.dispo?.interestedBuyers || []).map(b => b.buyerId);
+        const passedIds = deal.dispo?.passedBuyers || [];
+        return matchedBuyers.filter(b => !interestedIds.includes(b.id) && !passedIds.includes(b.id));
+    }, [matchedBuyers, deal.dispo?.interestedBuyers, deal.dispo?.passedBuyers]);
+
+    const interestedBuyersList = useMemo(() => {
+        return (deal.dispo?.interestedBuyers || []).map(ib => {
+            const buyer = buyers.find(b => b.id === ib.buyerId);
+            return { buyer, price: ib.price };
+        }).filter(ib => ib.buyer !== undefined) as { buyer: Buyer, price: string }[];
+    }, [deal.dispo?.interestedBuyers, buyers]);
+
+    const passedBuyersList = useMemo(() => {
+        return (deal.dispo?.passedBuyers || []).map(id => buyers.find(b => b.id === id)).filter(b => b !== undefined) as Buyer[];
+    }, [deal.dispo?.passedBuyers, buyers]);
+
+    const interestedSearchResults = useMemo(() => {
+        if (!interestedSearchQuery.trim()) return [];
+        const query = interestedSearchQuery.toLowerCase();
+        return buyers.filter(b => {
+            // Exclude buyers already in interested or passed lists
+            if (deal.dispo?.interestedBuyers?.some(ib => ib.buyerId === b.id)) return false;
+            if (deal.dispo?.passedBuyers?.includes(b.id)) return false;
+            
+            const nameMatch = b.name?.toLowerCase().includes(query);
+            const companyMatch = b.companyName?.toLowerCase().includes(query);
+            return nameMatch || companyMatch;
+        }).slice(0, 5); // Limit to 5 results
+    }, [interestedSearchQuery, buyers, deal.dispo?.interestedBuyers, deal.dispo?.passedBuyers]);
+
+    const handleMarkInterested = (buyerId: string) => {
+        const currentInterested = dealRef.current.dispo?.interestedBuyers || [];
+        const newInterested = [...currentInterested, { buyerId, price: '' }];
+        const newDispo = { ...(dealRef.current.dispo || { photos: false, blast: false }), interestedBuyers: newInterested };
+        updateDealState({ dispo: newDispo });
+        if(onUpdate) onUpdate(deal.id, { dispo: newDispo });
+        triggerSave();
+    };
+
+    const handleAddInterestedBuyer = (buyerId: string) => {
+        handleMarkInterested(buyerId);
+        setInterestedSearchQuery("");
+    };
+
+    const handleMarkPassed = (buyerId: string) => {
+        const currentPassed = dealRef.current.dispo?.passedBuyers || [];
+        const newInterested = (dealRef.current.dispo?.interestedBuyers || []).filter(b => b.buyerId !== buyerId);
+        const newPassed = [...currentPassed, buyerId];
+        const newDispo = { ...(dealRef.current.dispo || { photos: false, blast: false }), passedBuyers: newPassed, interestedBuyers: newInterested };
+        updateDealState({ dispo: newDispo });
+        if(onUpdate) onUpdate(deal.id, { dispo: newDispo });
+        triggerSave();
+    };
+
+    const handleUpdateInterestedPrice = (buyerId: string, price: string) => {
+        const currentInterested = dealRef.current.dispo?.interestedBuyers || [];
+        const newInterested = currentInterested.map(b => b.buyerId === buyerId ? { ...b, price } : b);
+        const newDispo = { ...(dealRef.current.dispo || { photos: false, blast: false }), interestedBuyers: newInterested };
+        updateDealState({ dispo: newDispo });
+        if(onUpdate) onUpdate(deal.id, { dispo: newDispo });
+    };
+
+    const handleMarkBought = (buyerId: string) => {
+        updateDealState({
+            offerDecision: 'Closed - Sold',
+            closedDate: new Date().toISOString()
+        });
+        if(onUpdate) onUpdate(deal.id, {
+            offerDecision: 'Closed - Sold',
+            closedDate: new Date().toISOString()
+        });
+        triggerSave();
     };
     
     // --- 6. SEARCH AS YOU TYPE (Duplicates & Google Autocomplete) ---
@@ -1305,6 +1513,117 @@ export const EditDealModal: React.FC<EditDealModalProps> = ({
                                             </div>
                                         ); 
                                     })}
+                                </div>
+                            </div>
+                        </div>
+                   </div>
+
+                   {/* Buyer Analytics Section */}
+                   <div className="space-y-4">
+                        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2 pb-2 border-b border-gray-200 dark:border-gray-800"><Users size={14}/> Buyer Analytics</h3>
+                        <div className="grid md:grid-cols-3 gap-4">
+                            {/* Matched Buyers Column */}
+                            <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 border border-gray-200 dark:border-gray-700/50 flex flex-col h-96">
+                                <h4 className="text-sm font-bold text-gray-900 dark:text-white mb-3 flex items-center justify-between">
+                                    Matched Buyers
+                                    <span className="bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-full">{availableMatchedBuyers.length}</span>
+                                </h4>
+                                <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+                                    {availableMatchedBuyers.length > 0 ? availableMatchedBuyers.map(buyer => (
+                                        <div key={buyer.id} className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col gap-2">
+                                            <div className="font-medium text-sm text-gray-900 dark:text-white truncate">{buyer.name || buyer.companyName}</div>
+                                            <div className="flex gap-2">
+                                                <button type="button" onClick={() => handleMarkInterested(buyer.id)} className="flex-1 bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50 py-1.5 rounded text-xs font-medium transition-colors">Interested</button>
+                                                <button type="button" onClick={() => handleMarkPassed(buyer.id)} className="flex-1 bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50 py-1.5 rounded text-xs font-medium transition-colors">Pass</button>
+                                            </div>
+                                        </div>
+                                    )) : (
+                                        <div className="text-center text-gray-500 text-xs py-4 italic">No matched buyers available.</div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Interested Buyers Column */}
+                            <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 border border-gray-200 dark:border-gray-700/50 flex flex-col h-96">
+                                <h4 className="text-sm font-bold text-gray-900 dark:text-white mb-3 flex items-center justify-between">
+                                    Interested Buyers
+                                    <span className="bg-green-100 text-green-800 text-xs px-2 py-0.5 rounded-full">{interestedBuyersList.length}</span>
+                                </h4>
+                                
+                                <div className="relative mb-3">
+                                    <input 
+                                        type="text" 
+                                        placeholder="Search buyers..." 
+                                        value={interestedSearchQuery}
+                                        onChange={(e) => setInterestedSearchQuery(e.target.value)}
+                                        className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-md py-1.5 px-3 text-xs focus:outline-none focus:border-blue-500"
+                                    />
+                                    {interestedSearchQuery && interestedSearchResults.length > 0 && (
+                                        <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-40 overflow-y-auto">
+                                            {interestedSearchResults.map(b => (
+                                                <button 
+                                                    key={b.id}
+                                                    type="button"
+                                                    onClick={() => handleAddInterestedBuyer(b.id)}
+                                                    className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-900 dark:text-white"
+                                                >
+                                                    {b.name || b.companyName}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+                                    {interestedBuyersList.length > 0 ? interestedBuyersList.map(({ buyer, price }) => (
+                                        <div key={buyer.id} className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col gap-2">
+                                            <div className="font-medium text-sm text-gray-900 dark:text-white truncate">{buyer.name || buyer.companyName}</div>
+                                            <div className="relative">
+                                                <span className="absolute left-2 top-1.5 text-gray-400 text-xs">$</span>
+                                                <input 
+                                                    type="text" 
+                                                    placeholder="Interested Price"
+                                                    className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded p-1.5 pl-5 text-gray-900 dark:text-white text-xs focus:border-blue-500 outline-none"
+                                                    value={price ? formatNumberWithCommas(parseNumberFromCurrency(price)) : ''}
+                                                    onChange={(e) => handleUpdateInterestedPrice(buyer.id, e.target.value)}
+                                                    onBlur={handleAutoSave}
+                                                />
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button type="button" onClick={() => handleMarkBought(buyer.id)} className="flex-1 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50 py-1.5 rounded text-xs font-medium transition-colors">Bought</button>
+                                                <button type="button" onClick={() => handleMarkPassed(buyer.id)} className="flex-1 bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50 py-1.5 rounded text-xs font-medium transition-colors">Pass</button>
+                                            </div>
+                                        </div>
+                                    )) : (
+                                        <div className="text-center text-gray-500 text-xs py-4 italic">No interested buyers yet.</div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Buyers Who Passed Column */}
+                            <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 border border-gray-200 dark:border-gray-700/50 flex flex-col h-96">
+                                <h4 className="text-sm font-bold text-gray-900 dark:text-white mb-3 flex items-center justify-between">
+                                    Buyers Who Passed
+                                    <span className="bg-red-100 text-red-800 text-xs px-2 py-0.5 rounded-full">{passedBuyersList.length}</span>
+                                </h4>
+                                <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+                                    {passedBuyersList.length > 0 ? passedBuyersList.map(buyer => (
+                                        <div key={buyer.id} className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm flex items-center justify-between">
+                                            <div className="font-medium text-sm text-gray-900 dark:text-white truncate">{buyer.name || buyer.companyName}</div>
+                                            <button type="button" onClick={() => {
+                                                const currentPassed = dealRef.current.dispo?.passedBuyers || [];
+                                                const newPassed = currentPassed.filter(id => id !== buyer.id);
+                                                const newDispo = { ...(dealRef.current.dispo || { photos: false, blast: false }), passedBuyers: newPassed };
+                                                updateDealState({ dispo: newDispo });
+                                                if(onUpdate) onUpdate(deal.id, { dispo: newDispo });
+                                                triggerSave();
+                                            }} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1">
+                                                <X size={14} />
+                                            </button>
+                                        </div>
+                                    )) : (
+                                        <div className="text-center text-gray-500 text-xs py-4 italic">No passed buyers yet.</div>
+                                    )}
                                 </div>
                             </div>
                         </div>

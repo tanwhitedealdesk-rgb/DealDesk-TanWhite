@@ -41,6 +41,8 @@ const processIncomingItem = (item: any, tableName: string) => {
         processed.photos = cleanArrayField(processed.photos, false).filter(Boolean);
         processed.dealType = Array.from(new Set(cleanArrayField(processed.dealType, true))).filter(Boolean);
         processed.logs = cleanArrayField(processed.logs, false).filter(Boolean);
+        processed.interestedBuyers = cleanArrayField(processed.interestedBuyers, false);
+        processed.buyersWhoPassed = cleanArrayField(processed.buyersWhoPassed, false);
         processed.pipelineType = tableName === 'JVDeals' ? 'jv' : 'main';
     }
 
@@ -147,6 +149,15 @@ export const api = {
             payload.properties = JSON.stringify(payload.properties);
         }
         
+        if (table === 'Deals' || table === 'JVDeals') {
+            if (payload.interestedBuyers && typeof payload.interestedBuyers === 'object') {
+                payload.interestedBuyers = JSON.stringify(payload.interestedBuyers);
+            }
+            if (payload.buyersWhoPassed && typeof payload.buyersWhoPassed === 'object') {
+                payload.buyersWhoPassed = JSON.stringify(payload.buyersWhoPassed);
+            }
+        }
+        
         const { data, error } = await supabase.from(table).upsert(payload).select().single();
         if (error) {
             console.error(`Error saving to ${table}:`, JSON.stringify(error, null, 2));
@@ -156,7 +167,23 @@ export const api = {
     },
 
     saveBatch: async (items: any[], table: string) => {
-        const { data, error } = await supabase.from(table).upsert(items).select();
+        const payloads = items.map(item => {
+            const payload = { ...item };
+            if (table === 'Wholesalers' && payload.properties && typeof payload.properties === 'object') {
+                payload.properties = JSON.stringify(payload.properties);
+            }
+            if (table === 'Deals' || table === 'JVDeals') {
+                if (payload.interestedBuyers && typeof payload.interestedBuyers === 'object') {
+                    payload.interestedBuyers = JSON.stringify(payload.interestedBuyers);
+                }
+                if (payload.buyersWhoPassed && typeof payload.buyersWhoPassed === 'object') {
+                    payload.buyersWhoPassed = JSON.stringify(payload.buyersWhoPassed);
+                }
+            }
+            return payload;
+        });
+
+        const { data, error } = await supabase.from(table).upsert(payloads).select();
         if (error) {
             console.error(`Error batch saving to ${table}:`, error);
             return null;

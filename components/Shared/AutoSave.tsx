@@ -11,6 +11,12 @@ export const useAutoSave = ({ onSave }: UseAutoSaveProps) => {
     const [isSaving, setIsSaving] = useState(false);
     const isSavingRef = useRef(false);
     const isDirtyRef = useRef(false);
+    const onSaveRef = useRef(onSave);
+
+    // Keep onSaveRef up to date
+    React.useEffect(() => {
+        onSaveRef.current = onSave;
+    }, [onSave]);
 
     const triggerSave = useCallback(async () => {
         if (isSavingRef.current) {
@@ -24,7 +30,7 @@ export const useAutoSave = ({ onSave }: UseAutoSaveProps) => {
         setShowErrorNotification(false);
 
         try {
-            await onSave();
+            await onSaveRef.current();
             setShowSavedNotification(true);
             setTimeout(() => setShowSavedNotification(false), 2000);
         } catch (error) {
@@ -41,7 +47,7 @@ export const useAutoSave = ({ onSave }: UseAutoSaveProps) => {
                 triggerSave();
             }
         }
-    }, [onSave]);
+    }, []);
 
     const handleAutoSave = useCallback(() => {
         triggerSave();

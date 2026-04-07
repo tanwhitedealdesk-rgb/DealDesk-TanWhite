@@ -37,6 +37,8 @@ export interface DispoSettings {
   photos: boolean;
   blast: boolean;
   loiSentAgents?: string[];
+  interestedBuyers?: { buyerId: string; price: string }[];
+  passedBuyers?: string[];
 }
 
 export interface Comparable {
