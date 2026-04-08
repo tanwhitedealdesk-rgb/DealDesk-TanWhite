@@ -46,6 +46,7 @@ export interface Comparable {
   saleDate: string;
   salePrice: number;
   sqft?: number;
+  softenerPercent?: number;
 }
 
 export interface Deal {

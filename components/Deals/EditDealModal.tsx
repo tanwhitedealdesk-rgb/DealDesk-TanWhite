@@ -863,21 +863,32 @@ export const EditDealModal: React.FC<EditDealModalProps> = ({
         }
     };
 
+    const getSoftenerArv = (comp?: Comparable) => {
+        if (!comp || !comp.salePrice) return 0;
+        const price = comp.salePrice;
+        const percent = comp.softenerPercent || 0;
+        return price - (price * (percent / 100));
+    };
+
     const updateComp = (key: 'comparable1' | 'comparable2' | 'comparable3', field: keyof Comparable, value: any) => {
         const currentComp = deal[key] || { address: '', saleDate: '', salePrice: 0 };
         const updatedComp = { ...currentComp, [field]: value };
         
         let newArv = deal.arv;
-        if (field === 'salePrice') {
-            const prices = [
-                key === 'comparable1' ? value : (deal.comparable1?.salePrice || 0),
-                key === 'comparable2' ? value : (deal.comparable2?.salePrice || 0),
-                key === 'comparable3' ? value : (deal.comparable3?.salePrice || 0)
-            ].filter(p => p > 0);
+        if (field === 'salePrice' || field === 'softenerPercent') {
+            const comp1 = key === 'comparable1' ? updatedComp : deal.comparable1;
+            const comp2 = key === 'comparable2' ? updatedComp : deal.comparable2;
+            const comp3 = key === 'comparable3' ? updatedComp : deal.comparable3;
+
+            const arv1 = getSoftenerArv(comp1);
+            const arv2 = getSoftenerArv(comp2);
+            const arv3 = getSoftenerArv(comp3);
+
+            const arvs = [arv1, arv2, arv3].filter(p => p > 0);
             
-            if (prices.length > 0) {
-                const sum = prices.reduce((a, b) => a + b, 0);
-                newArv = Math.round(sum / prices.length);
+            if (arvs.length > 0) {
+                const sum = arvs.reduce((a, b) => a + b, 0);
+                newArv = Math.round(sum / arvs.length);
             }
         }
 
@@ -1480,21 +1491,24 @@ export const EditDealModal: React.FC<EditDealModalProps> = ({
                                 <div className="space-y-3 bg-gray-50 dark:bg-gray-900/50 p-3 rounded border border-gray-200 dark:border-gray-800">
                                     <div className="grid grid-cols-12 gap-2 text-[10px] text-gray-500 uppercase font-bold">
                                             <div className="col-span-1 flex items-center">#</div>
-                                            <div className="col-span-4">Address</div>
-                                            <div className="col-span-2">Property Sqft</div>
+                                            <div className="col-span-3">Address</div>
+                                            <div className="col-span-1">Sqft</div>
                                             <div className="col-span-2">Sale Date</div>
-                                            <div className="col-span-3">Price</div>
+                                            <div className="col-span-2">Price</div>
+                                            <div className="col-span-1">Softener %</div>
+                                            <div className="col-span-2">Softener ARV</div>
                                     </div>
                                     {[1, 2, 3].map((num) => { 
                                         const compKey = `comparable${num}` as 'comparable1' | 'comparable2' | 'comparable3'; 
-                                        const comp = deal[compKey] || { address: '', saleDate: '', salePrice: 0, sqft: 0 }; 
+                                        const comp = deal[compKey] || { address: '', saleDate: '', salePrice: 0, sqft: 0, softenerPercent: 0 }; 
+                                        const softenerArv = Math.round(getSoftenerArv(comp));
                                         return (
                                             <div key={num} className="grid grid-cols-12 gap-2 items-center">
                                                 <div className="col-span-1 text-xs text-gray-500 font-bold">Comp {num}</div>
-                                                <div className="col-span-4">
+                                                <div className="col-span-3">
                                                     <input className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded p-1.5 text-gray-900 dark:text-white text-xs" placeholder="Address" value={comp.address} onChange={(e) => updateComp(compKey, 'address', e.target.value)} onBlur={handleAutoSave} />
                                                 </div>
-                                                <div className="col-span-2">
+                                                <div className="col-span-1">
                                                     <input 
                                                         className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded p-1.5 text-gray-900 dark:text-white text-xs" 
                                                         placeholder="Sqft" 
@@ -1506,9 +1520,17 @@ export const EditDealModal: React.FC<EditDealModalProps> = ({
                                                 <div className="col-span-2">
                                                     <input className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded p-1.5 text-gray-900 dark:text-white text-xs" placeholder="Date" value={comp.saleDate} onChange={(e) => updateComp(compKey, 'saleDate', e.target.value)} onBlur={handleAutoSave} />
                                                 </div>
-                                                <div className="col-span-3 relative">
+                                                <div className="col-span-2 relative">
                                                     <span className="absolute left-2 top-1.5 text-gray-400 text-xs">$</span>
                                                     <input className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded p-1.5 pl-5 text-gray-900 dark:text-white text-xs" placeholder="Price" value={comp.salePrice ? formatNumberWithCommas(comp.salePrice) : ''} onChange={(e) => updateComp(compKey, 'salePrice', parseNumberFromCurrency(e.target.value))} onBlur={handleAutoSave} />
+                                                </div>
+                                                <div className="col-span-1 relative">
+                                                    <input className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded p-1.5 pr-4 text-gray-900 dark:text-white text-xs" placeholder="%" value={comp.softenerPercent || ''} onChange={(e) => updateComp(compKey, 'softenerPercent', parseNumberFromCurrency(e.target.value))} onBlur={handleAutoSave} />
+                                                    <span className="absolute right-2 top-1.5 text-gray-400 text-xs">%</span>
+                                                </div>
+                                                <div className="col-span-2 relative">
+                                                    <span className="absolute left-2 top-1.5 text-gray-400 text-xs">$</span>
+                                                    <input disabled className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-1.5 pl-5 text-gray-700 dark:text-gray-300 text-xs" placeholder="ARV" value={softenerArv ? formatNumberWithCommas(softenerArv) : ''} />
                                                 </div>
                                             </div>
                                         ); 
