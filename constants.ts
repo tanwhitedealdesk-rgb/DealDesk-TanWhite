@@ -34,7 +34,7 @@ export const DECLINED_STATUSES = [
   'Listing Removed - Now Off Market', 
   'Offer Declined', 
   'Offer Declined and Sold', 
-  'Deal No Longer Available', 
+  'Sold To Another Investor', 
   'Deal Canceled', 
   'Priced Too High To Buy', 
   'No Longer Interested In Property',

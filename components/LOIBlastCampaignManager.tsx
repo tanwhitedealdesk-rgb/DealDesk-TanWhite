@@ -6,7 +6,6 @@ import {
 } from 'lucide-react';
 import { Recipient, api, sendEmail, sendBulkEmailGAS } from '../services/api';
 import { Buyer, Agent, Deal, User as UserType, Wholesaler } from '../types';
-import { GoogleGenAI } from "@google/genai";
 import { formatCurrency, processPhotoUrl, serverFunctions, getLogTimestamp, generateId } from '../services/utils';
 import { EmailEditor, EmailTemplate } from './EmailManager/EmailEditor';
 import { StartCampaignButton } from './EmailManager/StartCampaignButton';
@@ -479,76 +478,13 @@ export const LOIBlastCampaignManager: React.FC<LOIBlastCampaignManagerProps> = (
     };
 
     const handleGenerateEmailWithAI = async () => {
-        if (!selectedDeal) {
-            alert("Please select a property first.");
-            return;
-        }
-        
-        setIsGeneratingAI(true);
-        try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
-            const prompt = `You are a world-class real estate investment professional. 
-            Draft a high-converting, professional email to a ${emailType} regarding this property:
-            Address: ${selectedDeal.address}
-            Asking Price: ${formatCurrency(selectedDeal.listPrice)}
-            ARV: ${formatCurrency(selectedDeal.arv)}
-            Repairs: ${formatCurrency(selectedDeal.renovationEstimate)}
-            Specs: ${selectedDeal.bedrooms} bed / ${selectedDeal.bathrooms} bath, ${selectedDeal.sqft} sqft
-            Description: ${selectedDeal.listingDescription}
-            
-            The tone should be professional and direct.
-            
-            Output ONLY the HTML for the email body. Do not include <html> or <body> tags. Use standard HTML tags like <h1>, <p>, <ul>, <li>, and <strong>. 
-            Include the deal breakdown clearly. 
-            Format the output as clean HTML without any markdown code block wrappers.`;
-
-            const response = await ai.models.generateContent({
-                model: 'gemini-3-flash-preview',
-                contents: prompt
-            });
-
-            if (response.text) {
-                updateCampaign({ body: response.text });
-            }
-        } catch (e) {
-            console.error("AI Generation failed", e);
-            alert("Failed to generate email with AI.");
-        } finally {
-            setIsGeneratingAI(false);
-        }
+        alert("Google API usage is disabled for this feature.");
+        return;
     };
 
     const handleGenerateSubjectAI = async () => {
-        if (!selectedDeal) {
-            alert("Please select a property first.");
-            return;
-        }
-        
-        setIsGeneratingAI(true);
-        try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
-            const prompt = `You are a real estate marketing expert. 
-            Create a catchy, professional, and urgent email subject line for a ${emailType} regarding this property:
-            Address: ${selectedDeal.address}
-            Asking Price: ${formatCurrency(selectedDeal.listPrice)}
-            
-            The subject line should include emojis where appropriate and highlight the value proposition (e.g. price, area, or deal type).
-            Output ONLY the subject line text, no quotes, no extra text.`;
-
-            const response = await ai.models.generateContent({
-                model: 'gemini-3-flash-preview',
-                contents: prompt
-            });
-
-            if (response.text) {
-                updateCampaign({ subject: response.text.trim() });
-            }
-        } catch (e) {
-            console.error("AI Subject Generation failed", e);
-            alert("Failed to generate subject line with AI.");
-        } finally {
-            setIsGeneratingAI(false);
-        }
+        alert("Google API usage is disabled for this feature.");
+        return;
     };
 
     const handleInsertPhotos = async () => {

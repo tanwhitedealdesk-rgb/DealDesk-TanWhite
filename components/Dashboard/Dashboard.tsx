@@ -7,6 +7,7 @@ import { formatCurrency, getLogTimestamp, processPhotoUrl, timeAgo } from '../..
 import { POTENTIAL_STATUSES, UNDER_CONTRACT_STATUSES, DECLINED_STATUSES, CLOSED_STATUSES } from '../../constants';
 import { RecentDealCard } from './RecentDealCard';
 import { activityLogService } from '../../services/activityLogService';
+import { api } from '../../services/api';
 
 interface DashboardProps {
     currentUser: UserType | null;
@@ -98,11 +99,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser, deals, agents
 
     // Sort deals by newest first for Recent Deals section
     const recentDeals = useMemo(() => {
-        return [...deals].sort((a, b) => {
-            const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-            const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-            return dateB - dateA;
-        });
+        return [...deals]
+            .filter(d => !d.pipelineType || d.pipelineType === 'main')
+            .sort((a, b) => {
+                const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                return dateB - dateA;
+            });
     }, [deals]);
 
     // Chart Data Calculation (Last 14 Days Daily)
@@ -185,11 +188,30 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser, deals, agents
 
     // Real Activity Feed
     const [activities, setActivities] = useState<ActivityLog[]>([]);
+    const [loiLogs, setLoiLogs] = useState<ActivityLog[]>([]);
+    const [allUsers, setAllUsers] = useState<UserType[]>([]);
+    const [selectedUserForLoi, setSelectedUserForLoi] = useState<string>('All');
+    const [totalLoisTimeframe, setTotalLoisTimeframe] = useState<'week' | 'month' | 'year'>('week');
+    const [userLoisTimeframe, setUserLoisTimeframe] = useState<'week' | 'month' | 'year'>('week');
+    const [dealsAddedTimeframe, setDealsAddedTimeframe] = useState<'week' | 'month' | 'year'>('week');
+    const [listingsRemovedTimeframe, setListingsRemovedTimeframe] = useState<'week' | 'month' | 'year'>('week');
+    const [offersDeclinedTimeframe, setOffersDeclinedTimeframe] = useState<'week' | 'month' | 'year'>('week');
+    const [dealCanceledTimeframe, setDealCanceledTimeframe] = useState<'week' | 'month' | 'year'>('week');
 
     useEffect(() => {
         const fetchActivities = async () => {
             const logs = await activityLogService.getRecentActivity(20);
             setActivities(logs);
+            
+            const loiLogsData = await activityLogService.getLogsByActionType('LOI_SENT');
+            setLoiLogs(loiLogsData);
+
+            try {
+                const users = await api.load('Users') as UserType[];
+                setAllUsers(users);
+            } catch (e) {
+                console.error("Failed to fetch users", e);
+            }
         };
         fetchActivities();
         
@@ -197,6 +219,56 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser, deals, agents
         const interval = setInterval(fetchActivities, 60000);
         return () => clearInterval(interval);
     }, []);
+
+    const getStartDateForTimeframe = (timeframe: 'week' | 'month' | 'year') => {
+        const now = new Date();
+        let startDate = new Date();
+        if (timeframe === 'week') startDate.setDate(now.getDate() - 7);
+        if (timeframe === 'month') startDate.setMonth(now.getMonth() - 1);
+        if (timeframe === 'year') startDate.setFullYear(now.getFullYear() - 1);
+        return startDate;
+    };
+
+    const totalLoisSent = useMemo(() => {
+        const startDate = getStartDateForTimeframe(totalLoisTimeframe);
+        return deals.filter(d => new Date(d.createdAt || new Date()) >= startDate)
+                    .reduce((sum, d) => sum + (d.dispo?.loiSentAgents?.length || (d.loiSent ? 1 : 0)), 0);
+    }, [deals, totalLoisTimeframe]);
+
+    const loiSentByUser = useMemo(() => {
+        const startDate = getStartDateForTimeframe(userLoisTimeframe);
+        const counts: Record<string, number> = {};
+        
+        allUsers.forEach(u => {
+            counts[u.name] = 0;
+        });
+
+        loiLogs.filter(log => new Date(log.created_at) >= startDate).forEach(log => {
+            const name = log.user_name || 'Unknown';
+            counts[name] = (counts[name] || 0) + 1;
+        });
+        return counts;
+    }, [loiLogs, userLoisTimeframe, allUsers]);
+
+    const dealsAddedCount = useMemo(() => {
+        const startDate = getStartDateForTimeframe(dealsAddedTimeframe);
+        return deals.filter(d => new Date(d.createdAt || new Date()) >= startDate).length;
+    }, [deals, dealsAddedTimeframe]);
+
+    const listingsRemovedCount = useMemo(() => {
+        const startDate = getStartDateForTimeframe(listingsRemovedTimeframe);
+        return deals.filter(d => d.offerDecision === 'Listing Removed - Now Off Market' && new Date(d.createdAt || new Date()) >= startDate).length;
+    }, [deals, listingsRemovedTimeframe]);
+
+    const offersDeclinedCount = useMemo(() => {
+        const startDate = getStartDateForTimeframe(offersDeclinedTimeframe);
+        return deals.filter(d => (d.offerDecision === 'Offer Declined' || d.offerDecision === 'Offer Declined and Sold') && new Date(d.createdAt || new Date()) >= startDate).length;
+    }, [deals, offersDeclinedTimeframe]);
+
+    const dealCanceledCount = useMemo(() => {
+        const startDate = getStartDateForTimeframe(dealCanceledTimeframe);
+        return deals.filter(d => d.offerDecision === 'Deal Canceled' && new Date(d.createdAt || new Date()) >= startDate).length;
+    }, [deals, dealCanceledTimeframe]);
 
     const renderTrend = (trend: number) => {
         const isPositive = trend >= 0;
@@ -403,6 +475,120 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser, deals, agents
                             </div>
                         )}
                     </div>
+                </div>
+            </div>
+
+            {/* New KPI Cards Row */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {/* Total LOI's Sent */}
+                <div className="bg-[#10B981] rounded-2xl p-6 shadow-xl">
+                    <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-sm font-bold text-white/90">Total LOI's Sent</h3>
+                        <select 
+                            className="bg-white/20 border-none text-xs rounded-lg px-2 py-1 text-white outline-none cursor-pointer"
+                            value={totalLoisTimeframe}
+                            onChange={(e) => setTotalLoisTimeframe(e.target.value as any)}
+                        >
+                            <option value="week" className="text-gray-900">This Week</option>
+                            <option value="month" className="text-gray-900">This Month</option>
+                            <option value="year" className="text-gray-900">This Year</option>
+                        </select>
+                    </div>
+                    <div className="text-3xl font-bold text-white">{totalLoisSent}</div>
+                </div>
+                {/* LOI's Sent by User */}
+                <div className="bg-[#A855F7] rounded-2xl p-6 shadow-xl flex flex-col justify-between">
+                    <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-sm font-bold text-white/90">LOI's Sent by User</h3>
+                        <div className="flex flex-col gap-2 items-end">
+                            <select 
+                                className="bg-white/20 border-none text-xs rounded-lg px-2 py-1 text-white outline-none cursor-pointer"
+                                value={selectedUserForLoi}
+                                onChange={(e) => setSelectedUserForLoi(e.target.value)}
+                            >
+                                <option value="All" className="text-gray-900">All Users</option>
+                                {Object.keys(loiSentByUser).map(user => (
+                                    <option key={user} value={user} className="text-gray-900">{user}</option>
+                                ))}
+                            </select>
+                            <select 
+                                className="bg-white/20 border-none text-xs rounded-lg px-2 py-1 text-white outline-none cursor-pointer"
+                                value={userLoisTimeframe}
+                                onChange={(e) => setUserLoisTimeframe(e.target.value as any)}
+                            >
+                                <option value="week" className="text-gray-900">This Week</option>
+                                <option value="month" className="text-gray-900">This Month</option>
+                                <option value="year" className="text-gray-900">This Year</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div className="text-3xl font-bold text-white mt-auto">
+                        {selectedUserForLoi === 'All' ? Object.values(loiSentByUser).reduce((a, b) => a + b, 0) : (loiSentByUser[selectedUserForLoi] || 0)}
+                    </div>
+                </div>
+                {/* Deals Added */}
+                <div className="bg-[#00D4FF] rounded-2xl p-6 shadow-xl">
+                    <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-sm font-bold text-white/90">Deals Added</h3>
+                        <select 
+                            className="bg-white/20 border-none text-xs rounded-lg px-2 py-1 text-white outline-none cursor-pointer"
+                            value={dealsAddedTimeframe}
+                            onChange={(e) => setDealsAddedTimeframe(e.target.value as any)}
+                        >
+                            <option value="week" className="text-gray-900">This Week</option>
+                            <option value="month" className="text-gray-900">This Month</option>
+                            <option value="year" className="text-gray-900">This Year</option>
+                        </select>
+                    </div>
+                    <div className="text-3xl font-bold text-white">{dealsAddedCount}</div>
+                </div>
+                {/* Listings Removed */}
+                <div className="bg-[#F59E0B] rounded-2xl p-6 shadow-xl">
+                    <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-sm font-bold text-white/90">Listings Removed</h3>
+                        <select 
+                            className="bg-white/20 border-none text-xs rounded-lg px-2 py-1 text-white outline-none cursor-pointer"
+                            value={listingsRemovedTimeframe}
+                            onChange={(e) => setListingsRemovedTimeframe(e.target.value as any)}
+                        >
+                            <option value="week" className="text-gray-900">This Week</option>
+                            <option value="month" className="text-gray-900">This Month</option>
+                            <option value="year" className="text-gray-900">This Year</option>
+                        </select>
+                    </div>
+                    <div className="text-3xl font-bold text-white">{listingsRemovedCount}</div>
+                </div>
+                {/* Offers Declined */}
+                <div className="bg-[#FB7185] rounded-2xl p-6 shadow-xl">
+                    <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-sm font-bold text-white/90">Offers Declined</h3>
+                        <select 
+                            className="bg-white/20 border-none text-xs rounded-lg px-2 py-1 text-white outline-none cursor-pointer"
+                            value={offersDeclinedTimeframe}
+                            onChange={(e) => setOffersDeclinedTimeframe(e.target.value as any)}
+                        >
+                            <option value="week" className="text-gray-900">This Week</option>
+                            <option value="month" className="text-gray-900">This Month</option>
+                            <option value="year" className="text-gray-900">This Year</option>
+                        </select>
+                    </div>
+                    <div className="text-3xl font-bold text-white">{offersDeclinedCount}</div>
+                </div>
+                {/* Deal Canceled */}
+                <div className="bg-[#EF4444] rounded-2xl p-6 shadow-xl">
+                    <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-sm font-bold text-white/90">Deal Canceled</h3>
+                        <select 
+                            className="bg-white/20 border-none text-xs rounded-lg px-2 py-1 text-white outline-none cursor-pointer"
+                            value={dealCanceledTimeframe}
+                            onChange={(e) => setDealCanceledTimeframe(e.target.value as any)}
+                        >
+                            <option value="week" className="text-gray-900">This Week</option>
+                            <option value="month" className="text-gray-900">This Month</option>
+                            <option value="year" className="text-gray-900">This Year</option>
+                        </select>
+                    </div>
+                    <div className="text-3xl font-bold text-white">{dealCanceledCount}</div>
                 </div>
             </div>
 

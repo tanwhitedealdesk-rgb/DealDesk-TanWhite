@@ -98,5 +98,20 @@ export const activityLogService = {
         }
 
         return data as ActivityLog[];
+    },
+
+    getLogsByActionType: async (actionType: string): Promise<ActivityLog[]> => {
+        const { data, error } = await supabase
+            .from('activity_logs')
+            .select('*')
+            .eq('action_type', actionType)
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error('Error fetching activity logs by action type:', error);
+            return [];
+        }
+
+        return data as ActivityLog[];
     }
 };

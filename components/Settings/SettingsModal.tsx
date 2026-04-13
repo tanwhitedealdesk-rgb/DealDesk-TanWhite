@@ -7,7 +7,6 @@ import 'react-quill-new/dist/quill.snow.css';
 import { SettingsEmail } from './SettingsEmail';
 import { DatabaseAdmin } from './DatabaseAdmin';
 import { ChromePluginSettings } from './ChromePluginSettings';
-import { GoogleGenAI } from "@google/genai";
 import { serverFunctions, processPhotoUrl } from '../../services/utils';
 
 interface SettingsModalProps {
@@ -62,91 +61,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     };
 
     const handleGenerateBackgrounds = async () => {
-        setIsGeneratingBackgrounds(true);
-        setGenerationStatus('Initializing AI...');
-        try {
-            const apiKey = process.env.GEMINI_API_KEY;
-            if (!apiKey) {
-                 alert("Gemini API Key not found");
-                 return;
-            }
-            const ai = new GoogleGenAI({ apiKey });
-    
-            const prompts = {
-                totalDeals: "Abstract 3D dark blue background with a subtle glowing folder icon, minimalist, cybernetic style, high contrast, for a dashboard card background",
-                underContract: "Abstract 3D dark green background with a subtle glowing contract or handshake icon, minimalist, cybernetic style, high contrast, for a dashboard card background",
-                potentialRevenue: "Abstract 3D dark gold background with a subtle glowing dollar sign or rising chart icon, minimalist, cybernetic style, high contrast, for a dashboard card background",
-                closedDeals: "Abstract 3D dark purple background with a subtle glowing house icon, minimalist, cybernetic style, high contrast, for a dashboard card background"
-            };
-    
-            const newImages: Record<string, string> = {};
-            let count = 0;
-    
-            for (const [key, prompt] of Object.entries(prompts)) {
-                setGenerationStatus(`Generating ${key}...`);
-                // Add delay to avoid rate limits
-                if (count > 0) await new Promise(r => setTimeout(r, 4000));
-                count++;
-    
-                const response = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash-image',
-                    contents: { parts: [{ text: prompt }] },
-                });
-    
-                let base64 = '';
-                if (response.candidates?.[0]?.content?.parts) {
-                    for (const part of response.candidates[0].content.parts) {
-                        if (part.inlineData) {
-                            base64 = part.inlineData.data;
-                            break;
-                        }
-                    }
-                }
-    
-                if (base64) {
-                    const dataUrl = `data:image/png;base64,${base64}`;
-                    setGenerationStatus(`Uploading ${key} to Drive...`);
-                    
-                    // Upload to Drive
-                    const uploadRes = await serverFunctions.uploadDashboardAsset(dataUrl, `dashboard_bg_${key}.png`);
-                    
-                    if (uploadRes && uploadRes.url) {
-                        newImages[key] = processPhotoUrl(uploadRes.url);
-                    } else {
-                        console.error(`Failed to upload ${key}`, uploadRes);
-                        setGenerationStatus(`Failed to upload ${key}. Continuing...`);
-                    }
-                }
-            }
-    
-            if (Object.keys(newImages).length > 0) {
-                // Save to localStorage so Dashboard can pick it up
-                const existing = localStorage.getItem('azre_dashboard_bg_images_v1');
-                let current = {};
-                if (existing) {
-                    try { current = JSON.parse(existing); } catch(e) {}
-                }
-                
-                const updated = { ...current, ...newImages };
-                localStorage.setItem('azre_dashboard_bg_images_v1', JSON.stringify(updated));
-                setGenerationStatus('Done! Refreshing dashboard...');
-                setTimeout(() => {
-                    window.location.reload(); 
-                }, 1000);
-            } else {
-                setGenerationStatus('No images generated successfully.');
-            }
-    
-        } catch (error: any) {
-            console.error("Generation failed", error);
-            let msg = error.message || "Unknown error";
-            if (msg.includes('429') || msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED')) {
-                msg = "Quota exceeded. Please use 'Use Default Theme'.";
-            }
-            setGenerationStatus(`Error: ${msg}`);
-        } finally {
-            setIsGeneratingBackgrounds(false);
-        }
+        alert("Google API usage is disabled for this feature.");
+        return;
     };
 
     const handleSaveUserProfile = () => {

@@ -1010,7 +1010,13 @@ export default function App() {
         let actionType = 'UPDATE';
         let description = `Updated deal: ${saved.address}`;
         
-        if (updates.logs && currentItem.logs && updates.logs.length > currentItem.logs.length) {
+        const currentLoiAgents = currentItem.dispo?.loiSentAgents?.length || 0;
+        const newLoiAgents = updates.dispo?.loiSentAgents?.length || 0;
+
+        if ((updates.loiSent && !currentItem.loiSent) || (newLoiAgents > currentLoiAgents)) {
+            actionType = 'LOI_SENT';
+            description = `Sent LOI for ${saved.address}`;
+        } else if (updates.logs && currentItem.logs && updates.logs.length > currentItem.logs.length) {
             actionType = 'NOTE_ADDED';
             description = `Added a note to ${saved.address}`;
         } else if (updates.offerDecision && updates.offerDecision !== currentItem.offerDecision) {
