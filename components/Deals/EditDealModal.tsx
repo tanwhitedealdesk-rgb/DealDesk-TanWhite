@@ -148,14 +148,20 @@ const AgentSlot: React.FC<{
                                 <button 
                                     type="button" 
                                     onClick={() => onGenerateEmail(agent)}
-                                    className="bg-blue-600 hover:bg-blue-500 text-white text-xs px-3 py-2 rounded flex items-center gap-2 transition-colors font-bold shadow-sm w-full md:w-auto justify-center"
+                                    className="bg-blue-600 hover:bg-blue-500 text-white text-xs px-6 py-2 rounded flex items-center gap-2 transition-colors font-bold shadow-sm whitespace-nowrap shrink-0 justify-center"
                                 >
                                     <Send size={12} /> Send LOI
                                 </button>
                                 {(deal?.dispo?.loiSentAgents?.includes(agent.id) || (deal?.loiSent && deal?.agentName && agent?.name && deal.agentName.toLowerCase() === agent.name.toLowerCase())) && (
-                                    <span className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800 text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wider flex items-center gap-1">
-                                        <CheckCircle size={10} /> LOI Sent {deal?.loiSentDate ? `(${new Date(deal.loiSentDate).toLocaleDateString()})` : ''} {deal?.loiSentBy ? `by ${deal.loiSentBy}` : ''}
-                                    </span>
+                                    <div className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800 px-3 py-1.5 rounded-lg font-bold flex flex-col justify-center leading-tight w-fit">
+                                        <div className="flex items-center gap-1.5 whitespace-nowrap text-[11px]">
+                                            <CheckCircle size={12} className="shrink-0" /> 
+                                            <span>LOI Sent {deal?.loiSentDate ? `(${new Date(deal.loiSentDate).toLocaleDateString()})` : ''}</span>
+                                        </div>
+                                        {deal?.loiSentBy && (
+                                            <span className="pl-[18px] text-[10px] opacity-90 mt-0.5 whitespace-nowrap font-medium">By {deal.loiSentBy}</span>
+                                        )}
+                                    </div>
                                 )}
                             </div>
                         )}
