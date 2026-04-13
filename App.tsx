@@ -1013,7 +1013,7 @@ export default function App() {
         const currentLoiAgents = currentItem.dispo?.loiSentAgents?.length || 0;
         const newLoiAgents = updates.dispo?.loiSentAgents?.length || 0;
 
-        if ((updates.loiSent && !currentItem.loiSent) || (newLoiAgents > currentLoiAgents)) {
+        if (updates.loiSentDate && updates.loiSentDate !== currentItem.loiSentDate) {
             actionType = 'LOI_SENT';
             description = `Sent LOI for ${saved.address}`;
         } else if (updates.logs && currentItem.logs && updates.logs.length > currentItem.logs.length) {

@@ -113,6 +113,7 @@ export interface Deal {
   excludeStreetView?: boolean;
   loiSent?: boolean;
   loiSentDate?: string | null;
+  loiSentBy?: string;
 }
 
 export interface Agent {

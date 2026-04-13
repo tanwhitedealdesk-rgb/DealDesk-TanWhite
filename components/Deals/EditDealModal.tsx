@@ -824,6 +824,7 @@ export const EditDealModal: React.FC<EditDealModalProps> = ({
                 const updates: Partial<Deal> = { 
                     loiSent: true,
                     loiSentDate: now,
+                    loiSentBy: currentUser?.name || '',
                     logs: newLogs,
                     dispo: {
                         ...(deal.dispo || { photos: false, blast: false }),
