@@ -190,13 +190,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser, deals, agents
     const [activities, setActivities] = useState<ActivityLog[]>([]);
     const [loiLogs, setLoiLogs] = useState<ActivityLog[]>([]);
     const [allUsers, setAllUsers] = useState<UserType[]>([]);
-    const [selectedUserForLoi, setSelectedUserForLoi] = useState<string>('All');
+    const [selectedUserForLoi, setSelectedUserForLoi] = useState<string>(currentUser?.name || 'All');
     const [totalLoisTimeframe, setTotalLoisTimeframe] = useState<'week' | 'month' | 'year'>('week');
     const [userLoisTimeframe, setUserLoisTimeframe] = useState<'week' | 'month' | 'year'>('week');
     const [dealsAddedTimeframe, setDealsAddedTimeframe] = useState<'week' | 'month' | 'year'>('week');
     const [listingsRemovedTimeframe, setListingsRemovedTimeframe] = useState<'week' | 'month' | 'year'>('week');
     const [offersDeclinedTimeframe, setOffersDeclinedTimeframe] = useState<'week' | 'month' | 'year'>('week');
     const [dealCanceledTimeframe, setDealCanceledTimeframe] = useState<'week' | 'month' | 'year'>('week');
+
+    useEffect(() => {
+        if (currentUser?.name && selectedUserForLoi === 'All') {
+            setSelectedUserForLoi(currentUser.name);
+        }
+    }, [currentUser]);
 
     useEffect(() => {
         const fetchActivities = async () => {

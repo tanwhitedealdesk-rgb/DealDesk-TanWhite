@@ -674,7 +674,7 @@ export const EditDealModal: React.FC<EditDealModalProps> = ({
     const [isSendingEmail, setIsSendingEmail] = useState(false);
     const [emailStatus, setEmailStatus] = useState<{ type: 'error' | 'success', message: string } | null>(null);
     const [availableEmails, setAvailableEmails] = useState<SenderEmail[]>([]);
-    const [selectedFromEmail, setSelectedFromEmail] = useState("");
+    const [selectedFromEmail, setSelectedFromEmail] = useState(currentUser?.email || "");
     const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
     const [selectedAgentEmail, setSelectedAgentEmail] = useState<string | null>(null);
     const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
@@ -685,15 +685,20 @@ export const EditDealModal: React.FC<EditDealModalProps> = ({
                 const emails = await api.load('sender_emails') as SenderEmail[];
                 setAvailableEmails(emails);
                 if (emails.length > 0) {
-                    const defaultEmail = emails.find(e => e.is_default)?.email || emails[0].email;
-                    setSelectedFromEmail(defaultEmail);
+                    const userEmailExists = currentUser?.email && emails.some(e => e.email === currentUser.email);
+                    if (userEmailExists) {
+                        setSelectedFromEmail(currentUser.email);
+                    } else {
+                        const defaultEmail = emails.find(e => e.is_default)?.email || emails[0].email;
+                        setSelectedFromEmail(defaultEmail);
+                    }
                 }
             } catch (e) {
                 console.error("Failed to load sender emails:", e);
             }
         };
         fetchEmails();
-    }, []);
+    }, [currentUser]);
 
     const agent1 = agents.find(a => a.name.toLowerCase() === (deal.agentName || '').toLowerCase());
     const agent2 = agents.find(a => a.id === deal.secondAgentId);
