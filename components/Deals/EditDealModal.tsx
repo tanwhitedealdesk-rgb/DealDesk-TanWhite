@@ -154,7 +154,7 @@ const AgentSlot: React.FC<{
                                 </button>
                                 {(deal?.dispo?.loiSentAgents?.includes(agent.id) || (deal?.loiSent && deal?.agentName && agent?.name && deal.agentName.toLowerCase() === agent.name.toLowerCase())) && (
                                     <span className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800 text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wider flex items-center gap-1">
-                                        <CheckCircle size={10} /> LOI Sent {deal?.loiSentDate ? `(${new Date(deal.loiSentDate).toLocaleDateString()})` : ''}
+                                        <CheckCircle size={10} /> LOI Sent {deal?.loiSentDate ? `(${new Date(deal.loiSentDate).toLocaleDateString()})` : ''} {deal?.loiSentBy ? `by ${deal.loiSentBy}` : ''}
                                     </span>
                                 )}
                             </div>

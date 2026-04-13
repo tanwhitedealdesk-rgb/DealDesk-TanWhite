@@ -231,8 +231,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser, deals, agents
 
     const totalLoisSent = useMemo(() => {
         const startDate = getStartDateForTimeframe(totalLoisTimeframe);
-        return deals.filter(d => new Date(d.createdAt || new Date()) >= startDate)
-                    .reduce((sum, d) => sum + (d.dispo?.loiSentAgents?.length || (d.loiSent ? 1 : 0)), 0);
+        return deals.filter(d => {
+            const dateToUse = d.loiSentDate ? new Date(d.loiSentDate) : new Date(d.createdAt || new Date());
+            return dateToUse >= startDate;
+        }).reduce((sum, d) => sum + (d.dispo?.loiSentAgents?.length || (d.loiSent ? 1 : 0)), 0);
     }, [deals, totalLoisTimeframe]);
 
     const loiSentByUser = useMemo(() => {
@@ -243,12 +245,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser, deals, agents
             counts[u.name] = 0;
         });
 
-        loiLogs.filter(log => new Date(log.created_at) >= startDate).forEach(log => {
-            const name = log.user_name || 'Unknown';
-            counts[name] = (counts[name] || 0) + 1;
+        deals.filter(d => {
+            const dateToUse = d.loiSentDate ? new Date(d.loiSentDate) : new Date(d.createdAt || new Date());
+            return dateToUse >= startDate && (d.loiSent || (d.dispo?.loiSentAgents && d.dispo.loiSentAgents.length > 0));
+        }).forEach(d => {
+            const name = d.loiSentBy || 'Unknown';
+            const count = d.dispo?.loiSentAgents?.length || (d.loiSent ? 1 : 0);
+            counts[name] = (counts[name] || 0) + count;
         });
         return counts;
-    }, [loiLogs, userLoisTimeframe, allUsers]);
+    }, [deals, userLoisTimeframe, allUsers]);
 
     const dealsAddedCount = useMemo(() => {
         const startDate = getStartDateForTimeframe(dealsAddedTimeframe);
