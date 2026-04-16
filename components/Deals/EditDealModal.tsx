@@ -836,6 +836,7 @@ export const EditDealModal: React.FC<EditDealModalProps> = ({
                     loiSent: true,
                     loiSentDate: now,
                     loiSentBy: currentUser?.name || '',
+                    offerDecision: 'Made Written Offer On Property',
                     logs: newLogs,
                     dispo: {
                         ...(deal.dispo || { photos: false, blast: false }),
