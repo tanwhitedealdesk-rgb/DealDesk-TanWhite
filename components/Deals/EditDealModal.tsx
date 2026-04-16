@@ -686,6 +686,12 @@ export const EditDealModal: React.FC<EditDealModalProps> = ({
     const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
 
     useEffect(() => {
+        if (showEmailModal && currentUser?.email) {
+            setSelectedFromEmail(currentUser.email);
+        }
+    }, [showEmailModal, currentUser]);
+
+    useEffect(() => {
         const fetchEmails = async () => {
             try {
                 const emails = await api.load('sender_emails') as SenderEmail[];

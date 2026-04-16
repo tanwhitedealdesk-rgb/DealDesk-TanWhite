@@ -357,7 +357,7 @@ export default function App() {
       if (!name) return;
       const exists = brokerages.some(b => b.name.toLowerCase() === name.toLowerCase());
       if (exists === false) {
-          const newBrokerage: Brokerage = { id: generateId(), name: name, phone: phone || '', email: email || '', createdAt: getLogTimestamp() };
+          const newBrokerage: Brokerage = { id: generateId(), name: name, phone: phone || '', email: email || '', createdAt: new Date().toISOString() };
           await api.save(newBrokerage, 'Brokerages');
           setBrokerages(prev => [...prev, newBrokerage]);
           
@@ -999,6 +999,17 @@ export default function App() {
   const updateDeal = useCallback(async (id: string, updates: Partial<Deal>) => {
     let currentItem = deals.find(d => d.id === id);
     if (!currentItem) return;
+    
+    // Automatically track offerDecision changes
+    if (updates.offerDecision && updates.offerDecision !== currentItem.offerDecision) {
+        const newTrackingEntry = {
+            status: updates.offerDecision,
+            date: new Date().toISOString(),
+            user: currentUser?.name || 'Unknown'
+        };
+        updates.offerDecisionTracking = [...(currentItem.offerDecisionTracking || []), newTrackingEntry];
+    }
+    
     const tableName = currentItem.pipelineType === 'jv' ? 'JVDeals' : 'Deals';
     const saved = await api.save({ ...currentItem, ...updates }, tableName);
     if (saved) {
@@ -1158,6 +1169,16 @@ export default function App() {
     
     // Find original deal for diffing
     const originalDeal = deals.find(d => d.id === updatedDeal.id);
+    
+    // Automatically track offerDecision changes
+    if (originalDeal && updatedDeal.offerDecision !== originalDeal.offerDecision) {
+        const newTrackingEntry = {
+            status: updatedDeal.offerDecision,
+            date: new Date().toISOString(),
+            user: currentUser?.name || 'Unknown'
+        };
+        updatedDeal.offerDecisionTracking = [...(originalDeal.offerDecisionTracking || []), newTrackingEntry];
+    }
     
     // RESTORED: Fields are now saved to DB correctly based on user feedback
     try {
@@ -1334,7 +1355,12 @@ export default function App() {
           comparable1: { address: '', saleDate: '', salePrice: 0 },
           comparable2: { address: '', saleDate: '', salePrice: 0 },
           comparable3: { address: '', saleDate: '', salePrice: 0 },
-          photos: []
+          photos: [],
+          offerDecisionTracking: [{
+              status: isJv ? 'Available' : 'No Offer Made Yet',
+              date: new Date().toISOString(),
+              user: currentUser?.name || 'Unknown'
+          }]
       };
       try {
         const tableName = isJv ? 'JVDeals' : 'Deals';

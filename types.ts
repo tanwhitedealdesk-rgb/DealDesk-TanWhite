@@ -49,6 +49,12 @@ export interface Comparable {
   softenerPercent?: number;
 }
 
+export interface OfferDecisionTrack {
+  status: string;
+  date: string;
+  user: string;
+}
+
 export interface Deal {
   id: string;
   createdAt?: string;
@@ -114,6 +120,7 @@ export interface Deal {
   loiSent?: boolean;
   loiSentDate?: string | null;
   loiSentBy?: string;
+  offerDecisionTracking?: OfferDecisionTrack[];
 }
 
 export interface Agent {

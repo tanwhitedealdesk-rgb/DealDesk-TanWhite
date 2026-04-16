@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Deal, Agent, Buyer, User as UserType, ActivityLog } from '../../types';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
@@ -198,9 +198,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser, deals, agents
     const [offersDeclinedTimeframe, setOffersDeclinedTimeframe] = useState<'week' | 'month' | 'year'>('week');
     const [dealCanceledTimeframe, setDealCanceledTimeframe] = useState<'week' | 'month' | 'year'>('week');
 
+    const hasSetInitialUser = useRef(false);
     useEffect(() => {
-        if (currentUser?.name && selectedUserForLoi === 'All') {
+        if (currentUser?.name && !hasSetInitialUser.current) {
             setSelectedUserForLoi(currentUser.name);
+            hasSetInitialUser.current = true;
         }
     }, [currentUser]);
 
@@ -228,19 +230,38 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser, deals, agents
 
     const getStartDateForTimeframe = (timeframe: 'week' | 'month' | 'year') => {
         const now = new Date();
-        let startDate = new Date();
-        if (timeframe === 'week') startDate.setDate(now.getDate() - 7);
-        if (timeframe === 'month') startDate.setMonth(now.getMonth() - 1);
-        if (timeframe === 'year') startDate.setFullYear(now.getFullYear() - 1);
+        const startDate = new Date();
+        if (timeframe === 'week') {
+            const day = startDate.getDay();
+            const diff = startDate.getDate() - day + (day === 0 ? -6 : 1);
+            startDate.setDate(diff);
+            startDate.setHours(0, 0, 0, 0);
+        }
+        if (timeframe === 'month') {
+            startDate.setDate(1);
+            startDate.setHours(0, 0, 0, 0);
+        }
+        if (timeframe === 'year') {
+            startDate.setMonth(0, 1);
+            startDate.setHours(0, 0, 0, 0);
+        }
         return startDate;
     };
 
     const totalLoisSent = useMemo(() => {
         const startDate = getStartDateForTimeframe(totalLoisTimeframe);
         return deals.filter(d => {
-            const dateToUse = d.loiSentDate ? new Date(d.loiSentDate) : new Date(d.createdAt || new Date());
+            const hasLoi = d.loiSent || d.offerDecision === 'Made Written Offer On Property';
+            if (!hasLoi) return false;
+            
+            let dateToUseStr = d.loiSentDate || d.createdAt;
+            if (d.offerDecisionTracking && d.offerDecisionTracking.length > 0) {
+                 const tracking = d.offerDecisionTracking.find(t => t.status === 'Made Written Offer On Property');
+                 if (tracking) dateToUseStr = tracking.date;
+            }
+            const dateToUse = dateToUseStr ? new Date(dateToUseStr) : new Date();
             return dateToUse >= startDate;
-        }).reduce((sum, d) => sum + (d.dispo?.loiSentAgents?.length || (d.loiSent ? 1 : 0)), 0);
+        }).reduce((sum, d) => sum + Math.max(1, d.dispo?.loiSentAgents?.length || 1), 0);
     }, [deals, totalLoisTimeframe]);
 
     const loiSentByUser = useMemo(() => {
@@ -251,14 +272,28 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser, deals, agents
             counts[u.name] = 0;
         });
 
-        deals.filter(d => {
-            const dateToUse = d.loiSentDate ? new Date(d.loiSentDate) : new Date(d.createdAt || new Date());
-            return dateToUse >= startDate && (d.loiSent || (d.dispo?.loiSentAgents && d.dispo.loiSentAgents.length > 0));
-        }).forEach(d => {
-            const name = d.loiSentBy || 'Unknown';
-            const count = d.dispo?.loiSentAgents?.length || (d.loiSent ? 1 : 0);
-            counts[name] = (counts[name] || 0) + count;
+        // Add any missing users from the deals just in case
+        deals.forEach(d => {
+            const hasLoi = d.loiSent || d.offerDecision === 'Made Written Offer On Property';
+            if (!hasLoi) return;
+            
+            let dateToUseStr = d.loiSentDate || d.createdAt;
+            let sentBy = d.loiSentBy || d.acquisitionManager || 'Unknown User';
+            
+            if (d.offerDecisionTracking && d.offerDecisionTracking.length > 0) {
+                 const tracking = d.offerDecisionTracking.find(t => t.status === 'Made Written Offer On Property');
+                 if (tracking) { 
+                     dateToUseStr = tracking.date;
+                     sentBy = tracking.user || sentBy;
+                 }
+            }
+            const dateToUse = dateToUseStr ? new Date(dateToUseStr) : new Date();
+            if (dateToUse >= startDate) {
+                if (counts[sentBy] === undefined) counts[sentBy] = 0;
+                counts[sentBy] += Math.max(1, d.dispo?.loiSentAgents?.length || 1);
+            }
         });
+        
         return counts;
     }, [deals, userLoisTimeframe, allUsers]);
 
@@ -535,7 +570,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ currentUser, deals, agents
                         </div>
                     </div>
                     <div className="text-3xl font-bold text-white mt-auto">
-                        {selectedUserForLoi === 'All' ? Object.values(loiSentByUser).reduce((a, b) => a + b, 0) : (loiSentByUser[selectedUserForLoi] || 0)}
+                        {selectedUserForLoi === 'All' ? Object.values(loiSentByUser).reduce((a: number, b: number) => a + b, 0) : (loiSentByUser[selectedUserForLoi] || 0)}
                     </div>
                 </div>
                 {/* Deals Added */}
