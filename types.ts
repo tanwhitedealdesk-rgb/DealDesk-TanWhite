@@ -350,3 +350,15 @@ export interface MarketData {
   capRate: number;
   jobGrowth: number;
 }
+
+export interface Integration {
+    id: string;
+    created_at?: string;
+    updated_at?: string;
+    supabaseUrl?: string;
+    supabaseKey?: string;
+    mlsApiKey?: string;
+    twilioAccountSid?: string;
+    twilioAuthToken?: string;
+    twilioPhoneNumber?: string;
+}

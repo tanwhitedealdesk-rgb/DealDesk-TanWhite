@@ -1,6 +1,6 @@
 
 import React, { useState, useRef } from 'react';
-import { X, User, Home, Users, Layout, Save, LogOut, Upload, FileSpreadsheet, Download, Moon, Sun, Monitor, RefreshCw, Loader2, Database, Mail, Chrome, Image as ImageIcon, Wand2, Link } from 'lucide-react';
+import { X, CheckCircle, User, Home, Users, Layout, Save, LogOut, Upload, FileSpreadsheet, Download, Moon, Sun, Monitor, RefreshCw, Loader2, Database, Mail, Chrome, Image as ImageIcon, Wand2, Link } from 'lucide-react';
 import { User as UserType } from '../../types';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
@@ -8,6 +8,8 @@ import { SettingsEmail } from './SettingsEmail';
 import { DatabaseAdmin } from './DatabaseAdmin';
 import { ChromePluginSettings } from './ChromePluginSettings';
 import { serverFunctions, processPhotoUrl } from '../../services/utils';
+import { SUPABASE_URL, SUPABASE_KEY } from '../../constants';
+import { updateSupabaseClient, api } from '../../services/api';
 
 interface SettingsModalProps {
     onClose: () => void;
@@ -46,6 +48,97 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     const [editedUser, setEditedUser] = useState<any>({ ...user, confirmPassword: user.password || '' });
     const [isGeneratingBackgrounds, setIsGeneratingBackgrounds] = useState(false);
     const [generationStatus, setGenerationStatus] = useState('');
+    
+    // Supabase Settings State
+    const [supabaseUrlInput, setSupabaseUrlInput] = useState(localStorage.getItem('custom_supabase_url') || SUPABASE_URL || '');
+    const [supabaseKeyInput, setSupabaseKeyInput] = useState(localStorage.getItem('custom_supabase_key') || SUPABASE_KEY || '');
+    const [supabaseSaveStatus, setSupabaseSaveStatus] = useState('');
+    
+    // Global Integration State
+    const [integrationId, setIntegrationId] = useState<string | null>(null);
+    const [mlsApiKey, setMlsApiKey] = useState('');
+    const [twilioSid, setTwilioSid] = useState('');
+    const [twilioToken, setTwilioToken] = useState('');
+    const [twilioPhoneNumber, setTwilioPhoneNumber] = useState('');
+    const [isLoadingIntegrations, setIsLoadingIntegrations] = useState(false);
+    const [mlsSaveStatus, setMlsSaveStatus] = useState('');
+    const [twilioSaveStatus, setTwilioSaveStatus] = useState('');
+
+    React.useEffect(() => {
+        if (activeTab === 'integrations') {
+            const loadIntegrations = async () => {
+                setIsLoadingIntegrations(true);
+                try {
+                    const data = await api.load('Integrations');
+                    if (data && data.length > 0) {
+                        const ints = data[0];
+                        setIntegrationId(ints.id);
+                        if (ints.supabaseUrl && !localStorage.getItem('custom_supabase_url')) setSupabaseUrlInput(ints.supabaseUrl);
+                        if (ints.supabaseKey && !localStorage.getItem('custom_supabase_key')) setSupabaseKeyInput(ints.supabaseKey);
+                        setMlsApiKey(ints.mlsApiKey || '');
+                        setTwilioSid(ints.twilioAccountSid || '');
+                        setTwilioToken(ints.twilioAuthToken || '');
+                        setTwilioPhoneNumber(ints.twilioPhoneNumber || '');
+                    }
+                } catch (e) {
+                    console.error("Failed to load integrations", e);
+                } finally {
+                    setIsLoadingIntegrations(false);
+                }
+            };
+            loadIntegrations();
+        }
+    }, [activeTab]);
+
+    const handleSaveSupabaseConfig = async () => {
+        if (integrationId) {
+            try {
+                await api.save({
+                    id: integrationId,
+                    supabaseUrl: supabaseUrlInput.trim(),
+                    supabaseKey: supabaseKeyInput.trim()
+                }, 'Integrations');
+            } catch (e) {
+                console.error("Failed to save supabase config to DB", e);
+            }
+        }
+        
+        updateSupabaseClient(supabaseUrlInput.trim(), supabaseKeyInput.trim());
+        setSupabaseSaveStatus('Saved! App will use this database connection now.');
+        setTimeout(() => setSupabaseSaveStatus(''), 3000);
+        
+        // Refresh page to ensure all bindings catch the updated supabase client if needed
+        setTimeout(() => window.location.reload(), 1000);
+    };
+
+    const handleSaveMls = async () => {
+        if (integrationId) {
+            try {
+                await api.save({ id: integrationId, mlsApiKey }, 'Integrations');
+                setMlsSaveStatus('Saved MLS API Key');
+                setTimeout(() => setMlsSaveStatus(''), 3000);
+            } catch (e) {
+                console.error("Failed to save MLS config", e);
+            }
+        }
+    };
+
+    const handleSaveTwilio = async () => {
+        if (integrationId) {
+            try {
+                await api.save({ 
+                    id: integrationId, 
+                    twilioAccountSid: twilioSid, 
+                    twilioAuthToken: twilioToken,
+                    twilioPhoneNumber: twilioPhoneNumber
+                }, 'Integrations');
+                setTwilioSaveStatus('Saved Twilio Config');
+                setTimeout(() => setTwilioSaveStatus(''), 3000);
+            } catch (e) {
+                console.error("Failed to save Twilio config", e);
+            }
+        }
+    };
 
     const handleUseDefaultBackgrounds = () => {
         const defaultImages = {
@@ -365,6 +458,54 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             <div className="space-y-6">
                                 <h3 className="text-lg font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2">Integrations & APIs</h3>
                                 
+                                {/* Supabase Integration */}
+                                <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 shadow-sm">
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div>
+                                            <h4 className="font-bold text-gray-900 dark:text-white text-lg flex items-center gap-2">
+                                                <Database size={18} className="text-emerald-500" /> Supabase Integration
+                                            </h4>
+                                            <p className="text-sm text-gray-500 dark:text-gray-400">Configure your own Supabase project. This overrides the default app database connection.</p>
+                                        </div>
+                                        {localStorage.getItem('custom_supabase_url') ? (
+                                            <span className="px-2 py-1 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400 text-xs font-bold rounded flex items-center gap-1"><CheckCircle size={12} /> Custom Active</span>
+                                        ) : (
+                                            <span className="px-2 py-1 bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 text-xs font-bold rounded">Using Default</span>
+                                        )}
+                                    </div>
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Supabase URL</label>
+                                            <input 
+                                                type="text" 
+                                                value={supabaseUrlInput}
+                                                onChange={(e) => setSupabaseUrlInput(e.target.value)}
+                                                placeholder="https://xyzcompany.supabase.co" 
+                                                className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded p-2 text-sm focus:border-blue-500 outline-none font-mono" 
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Supabase Anon/Service Key</label>
+                                            <input 
+                                                type="password" 
+                                                value={supabaseKeyInput}
+                                                onChange={(e) => setSupabaseKeyInput(e.target.value)}
+                                                placeholder="eyJhbGciOiJIUzI1NiIsInR5c..." 
+                                                className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded p-2 text-sm focus:border-blue-500 outline-none font-mono" 
+                                            />
+                                        </div>
+                                        <div className="flex items-center gap-4">
+                                            <button 
+                                                onClick={handleSaveSupabaseConfig}
+                                                className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded text-sm font-medium transition"
+                                            >
+                                                Save Supabase Config
+                                            </button>
+                                            {supabaseSaveStatus && <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{supabaseSaveStatus}</span>}
+                                        </div>
+                                    </div>
+                                </div>
+                                
                                 {/* Nationwide MLS Integration */}
                                 <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 shadow-sm">
                                     <div className="flex justify-between items-start mb-4">
@@ -372,14 +513,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                             <h4 className="font-bold text-gray-900 dark:text-white text-lg">Nationwide MLS API</h4>
                                             <p className="text-sm text-gray-500 dark:text-gray-400">Configure access for the Market Scanner and Market Analyzer.</p>
                                         </div>
-                                        <span className="px-2 py-1 bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 text-xs font-bold rounded">Not Connected</span>
+                                        {mlsApiKey ? (
+                                            <span className="px-2 py-1 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400 text-xs font-bold rounded flex items-center gap-1"><CheckCircle size={12} /> Connected</span>
+                                        ) : (
+                                            <span className="px-2 py-1 bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 text-xs font-bold rounded">Not Connected</span>
+                                        )}
                                     </div>
                                     <div className="space-y-4">
                                         <div>
                                             <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">API Key</label>
-                                            <input type="password" placeholder="Enter your MLS API Key" className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded p-2 text-sm focus:border-blue-500 outline-none" />
+                                            <input 
+                                                type="password" 
+                                                placeholder="Enter your MLS API Key" 
+                                                value={mlsApiKey}
+                                                onChange={(e) => setMlsApiKey(e.target.value)}
+                                                className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded p-2 text-sm focus:border-blue-500 outline-none" 
+                                            />
                                         </div>
-                                        <button className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700 transition">Save MLS Config</button>
+                                        <div className="flex items-center gap-4">
+                                            <button onClick={handleSaveMls} className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700 transition">Save MLS Config</button>
+                                            {mlsSaveStatus && <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{mlsSaveStatus}</span>}
+                                        </div>
                                     </div>
                                 </div>
 
@@ -390,22 +544,47 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                             <h4 className="font-bold text-gray-900 dark:text-white text-lg">Twilio SMS</h4>
                                             <p className="text-sm text-gray-500 dark:text-gray-400">Configure Twilio for SMS campaigns and unified inbox.</p>
                                         </div>
-                                        <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-bold rounded">A2P 10DLC Pending</span>
+                                        {twilioSid && twilioToken ? (
+                                             <span className="px-2 py-1 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400 text-xs font-bold rounded flex items-center gap-1"><CheckCircle size={12} /> Connected</span>
+                                        ) : (
+                                            <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-bold rounded">A2P 10DLC Pending</span>
+                                        )}
                                     </div>
                                     <div className="space-y-4">
                                         <div>
                                             <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Account SID</label>
-                                            <input type="text" placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded p-2 text-sm focus:border-blue-500 outline-none" />
+                                            <input 
+                                                type="text" 
+                                                placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" 
+                                                value={twilioSid}
+                                                onChange={(e) => setTwilioSid(e.target.value)}
+                                                className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded p-2 text-sm focus:border-blue-500 outline-none" 
+                                            />
                                         </div>
                                         <div>
                                             <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Auth Token</label>
-                                            <input type="password" placeholder="••••••••••••••••••••••••••••••••" className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded p-2 text-sm focus:border-blue-500 outline-none" />
+                                            <input 
+                                                type="password" 
+                                                placeholder="••••••••••••••••••••••••••••••••" 
+                                                value={twilioToken}
+                                                onChange={(e) => setTwilioToken(e.target.value)}
+                                                className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded p-2 text-sm focus:border-blue-500 outline-none" 
+                                            />
                                         </div>
                                         <div>
                                             <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">Twilio Phone Number</label>
-                                            <input type="text" placeholder="+1 (555) 123-4567" className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded p-2 text-sm focus:border-blue-500 outline-none" />
+                                            <input 
+                                                type="text" 
+                                                placeholder="+1 (555) 123-4567" 
+                                                value={twilioPhoneNumber}
+                                                onChange={(e) => setTwilioPhoneNumber(e.target.value)}
+                                                className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded p-2 text-sm focus:border-blue-500 outline-none" 
+                                            />
                                         </div>
-                                        <button className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700 transition">Save Twilio Config</button>
+                                        <div className="flex items-center gap-4">
+                                            <button onClick={handleSaveTwilio} className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700 transition">Save Twilio Config</button>
+                                            {twilioSaveStatus && <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{twilioSaveStatus}</span>}
+                                        </div>
                                     </div>
                                 </div>
 

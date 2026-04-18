@@ -1,8 +1,17 @@
 
-import { createClient } from '@supabase/supabase-js';
-import { SUPABASE_URL, SUPABASE_KEY, GOOGLE_SCRIPT_URL } from '../constants';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { SUPABASE_URL as DEFAULT_SUPABASE_URL, SUPABASE_KEY as DEFAULT_SUPABASE_KEY, GOOGLE_SCRIPT_URL } from '../constants';
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const getStoredSupabaseUrl = () => localStorage.getItem('custom_supabase_url') || DEFAULT_SUPABASE_URL;
+const getStoredSupabaseKey = () => localStorage.getItem('custom_supabase_key') || DEFAULT_SUPABASE_KEY;
+
+export let supabase: SupabaseClient = createClient(getStoredSupabaseUrl(), getStoredSupabaseKey());
+
+export const updateSupabaseClient = (url: string, key: string) => {
+    localStorage.setItem('custom_supabase_url', url);
+    localStorage.setItem('custom_supabase_key', key);
+    supabase = createClient(url, key);
+};
 
 export interface Recipient {
     email: string;
