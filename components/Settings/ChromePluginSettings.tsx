@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Download, Copy, CheckCircle, Chrome, Code, FileJson, FileCode, Info, Loader2 } from 'lucide-react';
-import { SUPABASE_URL, SUPABASE_KEY, GOOGLE_SCRIPT_URL } from '../../constants';
+import { GOOGLE_SCRIPT_URL } from '../../constants';
 import JSZip from 'jszip';
 
 export const ChromePluginSettings: React.FC = () => {
@@ -19,7 +19,7 @@ export const ChromePluginSettings: React.FC = () => {
   "host_permissions": [
     "https://*.zillow.com/*", 
     "https://script.google.com/*",
-    "${SUPABASE_URL}/*"
+    "${localStorage.getItem('custom_supabase_url') || ''}/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -87,8 +87,8 @@ export const ChromePluginSettings: React.FC = () => {
 </html>`;
 
     const popupJsCode = `
-const SUPABASE_URL = "${SUPABASE_URL}";
-const SUPABASE_KEY = "${SUPABASE_KEY}";
+const SUPABASE_URL = "${localStorage.getItem('custom_supabase_url') || ''}";
+const SUPABASE_KEY = "${localStorage.getItem('custom_supabase_key') || ''}";
 const GOOGLE_SCRIPT_URL = "${GOOGLE_SCRIPT_URL}";
 
 document.addEventListener('DOMContentLoaded', async () => {

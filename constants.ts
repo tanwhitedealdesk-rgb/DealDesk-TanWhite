@@ -2,10 +2,6 @@
 export const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyEUeEVnaGj1p-_4qTuHX63i4QekUz6j2AgBKdNpvB8RVq7TojhduR_LILl34rBpOtn/exec"; 
 export const GOOGLE_MAPS_API_KEY = "AIzaSyASuyXz6R-QrKgqeiaHF_JYfmF2c88agy0"; 
 
-// --- SUPABASE CONFIGURATION ---
-export const SUPABASE_URL = "https://ygxgcmrhdzvfzhoxxsgv.supabase.co";
-export const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlneGdjbXJoZHp2Znpob3h4c2d2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NzEwNTI0NywiZXhwIjoyMDgyNjgxMjQ3fQ.iFRJVADhePDxMNGlVw5kP2hl8VmeCvTKW9KpSUcrB40";
-
 // --- STATUS CONSTANTS ---
 export const POTENTIAL_STATUSES = [
   'No Offer Made Yet', 

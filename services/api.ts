@@ -1,16 +1,28 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { SUPABASE_URL as DEFAULT_SUPABASE_URL, SUPABASE_KEY as DEFAULT_SUPABASE_KEY, GOOGLE_SCRIPT_URL } from '../constants';
+import { GOOGLE_SCRIPT_URL } from '../constants';
 
-const getStoredSupabaseUrl = () => localStorage.getItem('custom_supabase_url') || DEFAULT_SUPABASE_URL;
-const getStoredSupabaseKey = () => localStorage.getItem('custom_supabase_key') || DEFAULT_SUPABASE_KEY;
+const getStoredSupabaseUrl = () => localStorage.getItem('custom_supabase_url') || '';
+const getStoredSupabaseKey = () => localStorage.getItem('custom_supabase_key') || '';
 
-export let supabase: SupabaseClient = createClient(getStoredSupabaseUrl(), getStoredSupabaseKey());
+const createOrFallbackClient = () => {
+    const url = getStoredSupabaseUrl();
+    const key = getStoredSupabaseKey();
+    if (url && key) {
+        return createClient(url, key);
+    }
+    // Return a dummy client so the app doesn't crash on boot, but actual queries will fail gracefully.
+    return createClient('https://placeholder.supabase.co', 'placeholder');
+};
+
+export let supabase: SupabaseClient = createOrFallbackClient();
 
 export const updateSupabaseClient = (url: string, key: string) => {
     localStorage.setItem('custom_supabase_url', url);
     localStorage.setItem('custom_supabase_key', key);
-    supabase = createClient(url, key);
+    if (url && key) {
+        supabase = createClient(url, key);
+    }
 };
 
 export interface Recipient {
@@ -133,6 +145,10 @@ export const executeAdminSql = async (query: string) => {
         return await response.json();
     }
     
+    if (!getStoredSupabaseUrl() || !getStoredSupabaseKey()) {
+        return { status: 'error', message: 'Supabase is not configured' };
+    }
+
     // Fallback: Try Supabase RPC if exists
     const { data, error } = await supabase.rpc('execute_sql', { query });
     if (error) return { status: 'error', message: error.message };
@@ -141,6 +157,10 @@ export const executeAdminSql = async (query: string) => {
 
 export const api = {
     load: async (table: string) => {
+        if (!getStoredSupabaseUrl() || !getStoredSupabaseKey()) {
+             console.warn("Supabase not configured. Return empty dataset.");
+             return [];
+        }
         const { data, error } = await supabase.from(table).select('*');
         if (error) {
             console.error(`Error loading ${table}:`, error);
@@ -150,6 +170,9 @@ export const api = {
     },
 
     save: async (item: any, table: string) => {
+        if (!getStoredSupabaseUrl() || !getStoredSupabaseKey()) {
+             return null;
+        }
         // Strip ID if it looks like a temp ID or let Supabase handle it if UUID
         const payload = { ...item };
         
@@ -176,6 +199,9 @@ export const api = {
     },
 
     saveBatch: async (items: any[], table: string) => {
+        if (!getStoredSupabaseUrl() || !getStoredSupabaseKey()) {
+             return null;
+        }
         const payloads = items.map(item => {
             const payload = { ...item };
             if (table === 'Wholesalers' && payload.properties && typeof payload.properties === 'object') {
@@ -201,6 +227,9 @@ export const api = {
     },
 
     delete: async (id: string, table: string) => {
+        if (!getStoredSupabaseUrl() || !getStoredSupabaseKey()) {
+             return false;
+        }
         const { error } = await supabase.from(table).delete().eq('id', id);
         if (error) {
             console.error(`Error deleting from ${table}:`, error);

@@ -8,7 +8,6 @@ import { SettingsEmail } from './SettingsEmail';
 import { DatabaseAdmin } from './DatabaseAdmin';
 import { ChromePluginSettings } from './ChromePluginSettings';
 import { serverFunctions, processPhotoUrl } from '../../services/utils';
-import { SUPABASE_URL, SUPABASE_KEY } from '../../constants';
 import { updateSupabaseClient, api } from '../../services/api';
 
 interface SettingsModalProps {
@@ -50,8 +49,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     const [generationStatus, setGenerationStatus] = useState('');
     
     // Supabase Settings State
-    const [supabaseUrlInput, setSupabaseUrlInput] = useState(localStorage.getItem('custom_supabase_url') || SUPABASE_URL || '');
-    const [supabaseKeyInput, setSupabaseKeyInput] = useState(localStorage.getItem('custom_supabase_key') || SUPABASE_KEY || '');
+    const [supabaseUrlInput, setSupabaseUrlInput] = useState(localStorage.getItem('custom_supabase_url') || '');
+    const [supabaseKeyInput, setSupabaseKeyInput] = useState(localStorage.getItem('custom_supabase_key') || '');
     const [supabaseSaveStatus, setSupabaseSaveStatus] = useState('');
     
     // Global Integration State
