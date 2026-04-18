@@ -124,7 +124,11 @@ export default function App() {
   const handleLogin = async (user: UserType) => {
       const updatedUser: UserType = { ...user, loginStatus: 'Logged In' };
       try {
-          const saved = await api.save(updatedUser, 'Users');
+          let saved = await api.save(updatedUser, 'Users');
+          if (!saved) {
+              // Supabase not configured, fallback to using the user object itself as 'saved'
+              saved = updatedUser;
+          }
           if (saved) {
               setCurrentUser(saved);
               setIsAuthenticated(true);

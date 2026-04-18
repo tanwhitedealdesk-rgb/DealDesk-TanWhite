@@ -213,6 +213,7 @@ export function RenovationWorkflowManager({ deal, onUpdate }: { deal: Deal, onUp
             // Also add to Contacts Manager
             try {
                await api.save({
+                    id: crypto.randomUUID(),
                     name: newContractor.name,
                     company: newContractor.company || '',
                     type: 'Other',

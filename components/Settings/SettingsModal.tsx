@@ -90,19 +90,46 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }, [activeTab]);
 
     const handleSaveSupabaseConfig = async () => {
-        if (integrationId) {
+        updateSupabaseClient(supabaseUrlInput.trim(), supabaseKeyInput.trim());
+
+        // Check if there's a pending user login locally that we need to sync to Supabase
+        const pendingUserStr = localStorage.getItem('azre-pending-user');
+        if (pendingUserStr) {
             try {
+                const pendingUser = JSON.parse(pendingUserStr);
+                const savedObject = await api.save(pendingUser, 'Users');
+                if (savedObject) {
+                     localStorage.removeItem('azre-pending-user');
+                     if (onUpdateUser) onUpdateUser(savedObject); // make sure UI has the real UUID
+                }
+            } catch (e) {
+                console.error("Failed to sync pending user to Supabase:", e);
+            }
+        }
+
+        if (integrationId) {
+             try {
                 await api.save({
                     id: integrationId,
                     supabaseUrl: supabaseUrlInput.trim(),
                     supabaseKey: supabaseKeyInput.trim()
                 }, 'Integrations');
             } catch (e) {
-                console.error("Failed to save supabase config to DB", e);
+                console.error("Failed to update supabase config to DB", e);
+            }
+        } else {
+             // Create initial integration record since none exists locally mapped
+             try {
+                await api.save({
+                    id: crypto.randomUUID(),
+                    supabaseUrl: supabaseUrlInput.trim(),
+                    supabaseKey: supabaseKeyInput.trim()
+                }, 'Integrations');
+            } catch (e) {
+                console.error("Failed to create initial integration record", e);
             }
         }
-        
-        updateSupabaseClient(supabaseUrlInput.trim(), supabaseKeyInput.trim());
+
         setSupabaseSaveStatus('Saved! App will use this database connection now.');
         setTimeout(() => setSupabaseSaveStatus(''), 3000);
         

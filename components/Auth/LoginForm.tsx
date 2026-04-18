@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { AlertTriangle, Loader2, User, X, Info } from 'lucide-react';
 import { api, supabase } from '../../services/api';
 import { User as UserType } from '../../types';
+import { generateId } from '../../services/utils';
 
 interface LoginFormProps {
     onLogin: (user: UserType) => void;
@@ -146,6 +147,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
                 }
 
                 const newUserPartial = {
+                    id: generateId(),
                     name: formData.name,
                     email: formData.email,
                     password: formData.password, 
@@ -154,12 +156,31 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
                     loginStatus: 'Logged In' 
                 };
 
-                const savedUser = await api.save(newUserPartial, 'Users');
-                localStorage.setItem('azre-last-user', JSON.stringify({ name: savedUser.name, email: savedUser.email }));
+                let savedUser = await api.save(newUserPartial, 'Users');
                 
-                onLogin(savedUser);
+                if (!savedUser) {
+                    // Supabase not configured yet. Store pending user.
+                    savedUser = { ...newUserPartial } as UserType;
+                    localStorage.setItem('azre-pending-user', JSON.stringify(savedUser));
+                }
+
+                localStorage.setItem('azre-last-user', JSON.stringify({ name: savedUser.name, email: savedUser.email }));
+                onLogin(savedUser as UserType);
+                
             } else {
-                const user = users.find(u => u.email === formData.email && u.password === formData.password);
+                let user = users.find(u => u.email === formData.email && u.password === formData.password);
+                
+                if (!user) {
+                     // Check local pending user
+                     const pendingUserStr = localStorage.getItem('azre-pending-user');
+                     if (pendingUserStr) {
+                         const pendingUser = JSON.parse(pendingUserStr);
+                         if (pendingUser.email === formData.email && pendingUser.password === formData.password) {
+                             user = pendingUser;
+                         }
+                     }
+                }
+
                 if (user) {
                     const updatedUser = { ...user, loginStatus: 'Logged In' } as UserType;
                     await api.save(updatedUser, 'Users');
