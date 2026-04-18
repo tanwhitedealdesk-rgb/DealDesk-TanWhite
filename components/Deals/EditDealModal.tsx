@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Home, PhoneOutgoing, DollarSign, User, Clock, ArrowRight, Save, X, Activity, Briefcase, Calendar, MapPin, FileText, TrendingUp, AlertTriangle, CheckCircle, Search, Phone, Mail, Send, Copy, Plus, ChevronLeft, ChevronRight, TrendingDown, Loader2, LayoutGrid, Image as ImageIcon, Link as LinkIcon, Users, Pencil, Trash2, ArrowRightLeft } from 'lucide-react';
+import { Home, Wrench, PhoneOutgoing, DollarSign, User, Clock, ArrowRight, Save, X, Activity, Briefcase, Calendar, MapPin, FileText, TrendingUp, AlertTriangle, CheckCircle, Search, Phone, Mail, Send, Copy, Plus, ChevronLeft, ChevronRight, TrendingDown, Loader2, LayoutGrid, Image as ImageIcon, Link as LinkIcon, Users, Pencil, Trash2, ArrowRightLeft } from 'lucide-react';
 import { api, sendBulkEmailGAS } from '../../services/api';
 import { Deal, Agent, Brokerage, Comparable, User as UserType, Buyer } from '../../types';
 import { formatNumberWithCommas, parseNumberFromCurrency, formatPhoneNumber, getLogTimestamp, formatCurrency, calculateDaysRemaining, serverFunctions, processPhotoUrl, loadGoogleMapsScript } from '../../services/utils';
@@ -12,6 +12,7 @@ import { ModalFooter, NavigationArrows, UnsavedChangesModal } from '../Shared/Mo
 import { useAutoSave, SavedNotification } from '../Shared/AutoSave';
 import { BuyerMatchModal } from './BuyerMatchModal';
 import { PropertyPhotoGallery } from './PropertyPhotoGallery';
+import { RenovationWorkflowManager } from './RenovationWorkflow';
 import { 
     SUB_MARKETS, 
     COUNTIES, 
@@ -288,6 +289,7 @@ export const EditDealModal: React.FC<EditDealModalProps> = ({
     
     // Buyer Analytics State
     const [interestedSearchQuery, setInterestedSearchQuery] = useState("");
+    const [activeBottomTab, setActiveBottomTab] = useState<'buyerAnalytics' | 'renovationWorkflow'>('buyerAnalytics');
     
     // Services Ref
     const autocompleteService = useRef<any>(null);
@@ -1559,10 +1561,27 @@ export const EditDealModal: React.FC<EditDealModalProps> = ({
                         </div>
                    </div>
 
-                   {/* Buyer Analytics Section */}
-                   <div className="space-y-4">
-                        <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2 pb-2 border-b border-gray-200 dark:border-gray-800"><Users size={14}/> Buyer Analytics</h3>
-                        <div className="grid md:grid-cols-3 gap-4">
+                   {/* Bottom Tabs Selection */}
+                   <div className="flex border-b border-gray-200 dark:border-gray-800 gap-6 mt-8">
+                        <button
+                            type="button"
+                            onClick={() => setActiveBottomTab('buyerAnalytics')}
+                            className={`pb-2 text-xs font-bold uppercase tracking-wider flex items-center gap-2 border-b-2 transition-colors ${activeBottomTab === 'buyerAnalytics' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                        >
+                            <Users size={14}/> Buyer Analytics
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setActiveBottomTab('renovationWorkflow')}
+                            className={`pb-2 text-xs font-bold uppercase tracking-wider flex items-center gap-2 border-b-2 transition-colors ${activeBottomTab === 'renovationWorkflow' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                        >
+                            <Wrench size={14}/> Renovation Workflow
+                        </button>
+                   </div>
+
+                   {activeBottomTab === 'buyerAnalytics' && (
+                       <div className="space-y-4">
+                            <div className="grid md:grid-cols-3 gap-4 mt-4">
                             {/* Matched Buyers Column */}
                             <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 border border-gray-200 dark:border-gray-700/50 flex flex-col h-96">
                                 <h4 className="text-sm font-bold text-gray-900 dark:text-white mb-3 flex items-center justify-between">
@@ -1669,6 +1688,20 @@ export const EditDealModal: React.FC<EditDealModalProps> = ({
                             </div>
                         </div>
                    </div>
+                   )}
+
+                   {activeBottomTab === 'renovationWorkflow' && (
+                       <div className="mt-4">
+                           <RenovationWorkflowManager 
+                               deal={deal}
+                               onUpdate={(updates) => {
+                                   updateDealState(updates);
+                                   if(onUpdate) onUpdate(deal.id, updates);
+                                   triggerSave();
+                               }}
+                           />
+                       </div>
+                   )}
 
                    {/* Activity Log Section */}
                    <div className="space-y-4">

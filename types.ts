@@ -55,6 +55,38 @@ export interface OfferDecisionTrack {
   user: string;
 }
 
+export interface RenovationItem {
+  id: string; // e.g. "Soft Costs_Temp Utilities"
+  category: string;
+  scope: string;
+  projectedCost: number;
+  actualCost: number;
+}
+
+export interface RenovationStage {
+  stage: string;
+  isActive: boolean;
+  completedAt?: string | null;
+  notes?: string;
+}
+
+export interface RenovationContractor {
+  id: string;
+  name: string;
+  company: string;
+  trade: string;
+  phone: string;
+  email: string;
+  assignedTasks: string;
+  status: 'Active' | 'Completed' | 'Removed';
+}
+
+export interface RenovationWorkflow {
+  budgetItems: RenovationItem[];
+  stages: RenovationStage[];
+  contractors: RenovationContractor[];
+}
+
 export interface Deal {
   id: string;
   createdAt?: string;
@@ -121,6 +153,7 @@ export interface Deal {
   loiSentDate?: string | null;
   loiSentBy?: string;
   offerDecisionTracking?: OfferDecisionTrack[];
+  renovationWorkflow?: RenovationWorkflow;
 }
 
 export interface Agent {
