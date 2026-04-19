@@ -70,7 +70,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 try {
                     const data = await api.load('Integrations');
                     if (data && data.length > 0) {
-                        const ints = data[0];
+                        const orgInt = data.find((i: any) => i.organization && user.organization && i.organization.toLowerCase() === user.organization.toLowerCase());
+                        const ints = orgInt || data[0];
                         setIntegrationId(ints.id);
                         if (ints.supabaseUrl && !localStorage.getItem('custom_supabase_url')) setSupabaseUrlInput(ints.supabaseUrl);
                         if (ints.supabaseKey && !localStorage.getItem('custom_supabase_key')) setSupabaseKeyInput(ints.supabaseKey);
@@ -87,7 +88,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             };
             loadIntegrations();
         }
-    }, [activeTab]);
+    }, [activeTab, user.organization]);
 
     const handleSaveSupabaseConfig = async () => {
         updateSupabaseClient(supabaseUrlInput.trim(), supabaseKeyInput.trim());
@@ -123,7 +124,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 await api.save({
                     id: crypto.randomUUID(),
                     supabaseUrl: supabaseUrlInput.trim(),
-                    supabaseKey: supabaseKeyInput.trim()
+                    supabaseKey: supabaseKeyInput.trim(),
+                    organization: user.organization
                 }, 'Integrations');
             } catch (e) {
                 console.error("Failed to create initial integration record", e);
@@ -138,31 +140,45 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     };
 
     const handleSaveMls = async () => {
-        if (integrationId) {
-            try {
+        try {
+            if (integrationId) {
                 await api.save({ id: integrationId, mlsApiKey }, 'Integrations');
-                setMlsSaveStatus('Saved MLS API Key');
-                setTimeout(() => setMlsSaveStatus(''), 3000);
-            } catch (e) {
-                console.error("Failed to save MLS config", e);
+            } else {
+                const newId = crypto.randomUUID();
+                await api.save({ id: newId, mlsApiKey, organization: user.organization }, 'Integrations');
+                setIntegrationId(newId);
             }
+            setMlsSaveStatus('Saved MLS API Key');
+            setTimeout(() => setMlsSaveStatus(''), 3000);
+        } catch (e) {
+            console.error("Failed to save MLS config", e);
         }
     };
 
     const handleSaveTwilio = async () => {
-        if (integrationId) {
-            try {
+        try {
+            if (integrationId) {
                 await api.save({ 
                     id: integrationId, 
                     twilioAccountSid: twilioSid, 
                     twilioAuthToken: twilioToken,
                     twilioPhoneNumber: twilioPhoneNumber
                 }, 'Integrations');
-                setTwilioSaveStatus('Saved Twilio Config');
-                setTimeout(() => setTwilioSaveStatus(''), 3000);
-            } catch (e) {
-                console.error("Failed to save Twilio config", e);
+            } else {
+                const newId = crypto.randomUUID();
+                await api.save({ 
+                    id: newId, 
+                    twilioAccountSid: twilioSid, 
+                    twilioAuthToken: twilioToken,
+                    twilioPhoneNumber: twilioPhoneNumber,
+                    organization: user.organization
+                }, 'Integrations');
+                setIntegrationId(newId);
             }
+            setTwilioSaveStatus('Saved Twilio Config');
+            setTimeout(() => setTwilioSaveStatus(''), 3000);
+        } catch (e) {
+            console.error("Failed to save Twilio config", e);
         }
     };
 
@@ -307,6 +323,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                     <div>
                                         <label className="text-xs text-gray-500 dark:text-gray-400 uppercase font-bold mb-1.5 block">Company Position</label>
                                         <input className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-3 text-gray-900 dark:text-white text-sm focus:border-blue-500 outline-none transition-colors" value={editedUser.position} onChange={e => setEditedUser({...editedUser, position: e.target.value})} />
+                                    </div>
+                                    
+                                    <div>
+                                        <label className="text-xs text-gray-500 dark:text-gray-400 uppercase font-bold mb-1.5 block">Organization</label>
+                                        <input className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-3 text-gray-900 dark:text-white text-sm focus:border-blue-500 outline-none transition-colors" value={editedUser.organization || ''} onChange={e => setEditedUser({...editedUser, organization: e.target.value})} placeholder="e.g. AZRE" />
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-4">

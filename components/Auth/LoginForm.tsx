@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { AlertTriangle, Loader2, User, X, Info } from 'lucide-react';
-import { api, supabase } from '../../services/api';
+import { api, supabase, updateSupabaseClient } from '../../services/api';
 import { User as UserType } from '../../types';
 import { generateId } from '../../services/utils';
 
@@ -15,7 +15,9 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
         name: '', email: '', password: '', confirmPassword: '', inviteCode: '',
         organizationAction: 'join' as 'create' | 'join',
         organizationName: '',
-        selectedOrganization: ''
+        selectedOrganization: '',
+        supabaseUrl: '',
+        supabaseKey: ''
     });
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
@@ -97,6 +99,22 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
                         user = await api.save(updatedUser, 'Users');
                     }
                     
+                    if (user && user.organization) {
+                        try {
+                            const ints = await api.load('Integrations');
+                            const orgConfig = ints.find((i: any) => {
+                                let o = i.organization;
+                                if (typeof o === 'string' && o.startsWith('"') && o.endsWith('"')) o = o.slice(1, -1);
+                                return o === user!.organization;
+                            });
+                            if (orgConfig && orgConfig.supabaseUrl && orgConfig.supabaseKey) {
+                                updateSupabaseClient(orgConfig.supabaseUrl.trim(), orgConfig.supabaseKey.trim());
+                            }
+                        } catch (e) {
+                            console.error("Failed to load organization supabase config on Google login", e);
+                        }
+                    }
+
                     if (user) {
                         localStorage.setItem('azre-last-user', JSON.stringify({ name: user.name, email: user.email }));
                         onLogin(user);
@@ -214,14 +232,38 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
 
                 // If they created a new organization, ensure an Integrations row exists for it
                 if (formData.organizationAction === 'create') {
+                    if (formData.supabaseUrl && formData.supabaseKey) {
+                        try {
+                            updateSupabaseClient(formData.supabaseUrl.trim(), formData.supabaseKey.trim());
+                        } catch (e) {
+                            console.error("Failed to apply new supabase settings", e);
+                        }
+                    }
                     try {
                         await api.save({
                             id: generateId(),
                             organization: orgName,
-                            inviteCode: formData.inviteCode || 'azre-invite'
+                            inviteCode: formData.inviteCode || 'azre-invite',
+                            supabaseUrl: formData.supabaseUrl.trim(),
+                            supabaseKey: formData.supabaseKey.trim()
                         }, 'Integrations');
                     } catch(e) {
                         console.error("Failed to create integration for new org", e);
+                    }
+                } else {
+                    // Try to load settings if joining an existing org that has them defined
+                    try {
+                        const ints = await api.load('Integrations');
+                        const joinedOrgIntegration = ints.find((i: any) => {
+                            let o = i.organization;
+                            if (typeof o === 'string' && o.startsWith('"') && o.endsWith('"')) o = o.slice(1, -1);
+                            return o === orgName;
+                        });
+                        if (joinedOrgIntegration && joinedOrgIntegration.supabaseUrl && joinedOrgIntegration.supabaseKey) {
+                            updateSupabaseClient(joinedOrgIntegration.supabaseUrl.trim(), joinedOrgIntegration.supabaseKey.trim());
+                        }
+                    } catch (e) {
+                        console.error("Failed to load existing integration credentials", e);
                     }
                 }
 
@@ -252,6 +294,24 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
 
                 if (user) {
                     const updatedUser = { ...user, loginStatus: 'Logged In' } as UserType;
+                    
+                    // Use organization designation to load Supabase settings
+                    if (updatedUser.organization) {
+                        try {
+                            const ints = await api.load('Integrations');
+                            const orgConfig = ints.find((i: any) => {
+                                let o = i.organization;
+                                if (typeof o === 'string' && o.startsWith('"') && o.endsWith('"')) o = o.slice(1, -1);
+                                return o === updatedUser.organization;
+                            });
+                            if (orgConfig && orgConfig.supabaseUrl && orgConfig.supabaseKey) {
+                                updateSupabaseClient(orgConfig.supabaseUrl.trim(), orgConfig.supabaseKey.trim());
+                            }
+                        } catch (e) {
+                            console.error("Failed to load organization supabase config on login", e);
+                        }
+                    }
+
                     await api.save(updatedUser, 'Users');
                     localStorage.setItem('azre-last-user', JSON.stringify({ name: user.name, email: user.email }));
                     onLogin(updatedUser);
@@ -370,9 +430,19 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
                                 )}
                                 
                                 {formData.organizationAction === 'create' && (
-                                    <div>
-                                        <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase font-bold mb-1">Organization Name</label>
-                                        <input required className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded p-3 text-gray-900 dark:text-white focus:border-blue-500 dark:focus:border-[#4ADE80] outline-none transition-colors" placeholder="e.g. AZRE" value={formData.organizationName} onChange={e => setFormData({...formData, organizationName: e.target.value})} />
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase font-bold mb-1">Organization Name</label>
+                                            <input required className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded p-3 text-gray-900 dark:text-white focus:border-blue-500 dark:focus:border-[#4ADE80] outline-none transition-colors" placeholder="e.g. AZRE" value={formData.organizationName} onChange={e => setFormData({...formData, organizationName: e.target.value})} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase font-bold mb-1">Supabase URL</label>
+                                            <input required className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded p-3 text-gray-900 dark:text-white focus:border-blue-500 dark:focus:border-[#4ADE80] outline-none transition-colors" placeholder="https://..." value={formData.supabaseUrl} onChange={e => setFormData({...formData, supabaseUrl: e.target.value})} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase font-bold mb-1">Supabase Anon Key</label>
+                                            <input required type="password" className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded p-3 text-gray-900 dark:text-white focus:border-blue-500 dark:focus:border-[#4ADE80] outline-none transition-colors" placeholder="ey..." value={formData.supabaseKey} onChange={e => setFormData({...formData, supabaseKey: e.target.value})} />
+                                        </div>
                                     </div>
                                 )}
                             </div>
