@@ -31,6 +31,7 @@ export interface User {
   loginStatus?: 'Logged In' | 'Logged Out';
   photo?: string;
   signature?: string;
+  organization?: string;
 }
 
 export interface DispoSettings {
@@ -361,4 +362,6 @@ export interface Integration {
     twilioAccountSid?: string;
     twilioAuthToken?: string;
     twilioPhoneNumber?: string;
+    organization?: string;
+    inviteCode?: string;
 }

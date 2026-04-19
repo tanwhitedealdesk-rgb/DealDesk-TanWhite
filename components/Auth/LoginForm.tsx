@@ -11,15 +11,40 @@ interface LoginFormProps {
 
 export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
     const [isSignup, setIsSignup] = useState(false);
-    const [formData, setFormData] = useState({ name: '', email: '', password: '', confirmPassword: '', inviteCode: '' });
+    const [formData, setFormData] = useState({ 
+        name: '', email: '', password: '', confirmPassword: '', inviteCode: '',
+        organizationAction: 'join' as 'create' | 'join',
+        organizationName: '',
+        selectedOrganization: ''
+    });
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [organizations, setOrganizations] = useState<string[]>([]);
     
     // Cache state
     const [cachedUser, setCachedUser] = useState<{name: string, email: string} | null>(null);
     const [useCachedUser, setUseCachedUser] = useState(false);
 
     useEffect(() => {
+        const fetchOrganizations = async () => {
+            try {
+                const ints = await api.load('Integrations');
+                let orgList = ints.map((i: any) => {
+                    let org = i.organization;
+                    if (typeof org === 'string' && org.startsWith('"') && org.endsWith('"')) {
+                        org = org.slice(1, -1);
+                    }
+                    return org;
+                }).filter(Boolean);
+                orgList = Array.from(new Set(orgList));
+                if (orgList.length === 0) orgList = ['AZRE'];
+                setOrganizations(orgList);
+            } catch {
+                setOrganizations(['AZRE']);
+            }
+        };
+        fetchOrganizations();
+
         const savedLastUser = localStorage.getItem('azre-last-user');
         if (savedLastUser) {
             try {
@@ -134,8 +159,38 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
             const users = await api.load('Users') as UserType[];
             
             if (isSignup) {
-                if (formData.inviteCode.toLowerCase() !== 'zakar') {
-                    throw new Error("Invalid Invite Code");
+                let orgName = '';
+                if (formData.organizationAction === 'create') {
+                    if (!formData.organizationName) throw new Error("Organization Name is required");
+                    orgName = formData.organizationName;
+                } else {
+                    orgName = formData.selectedOrganization;
+                    if (!orgName) throw new Error("Please select an organization to join");
+                    
+                    try {
+                        const integrations = await api.load('Integrations');
+                        const orgIntegration = integrations.find((i: any) => i.organization === orgName || i.organization === `"${orgName}"`);
+                        
+                        let integrationInvite = orgIntegration?.inviteCode;
+                        if (typeof integrationInvite === 'string' && integrationInvite.startsWith('"') && integrationInvite.endsWith('"')) {
+                            integrationInvite = integrationInvite.slice(1, -1);
+                        }
+
+                        if (orgIntegration && integrationInvite) {
+                            if (formData.inviteCode !== integrationInvite) {
+                                throw new Error("Invalid Invite Code for this organization");
+                            }
+                        } else {
+                             // Default fallback
+                             if (formData.inviteCode.toLowerCase() !== 'zakar') {
+                                 throw new Error("Invalid Invite Code");
+                             }
+                        }
+                    } catch {
+                        if (formData.inviteCode.toLowerCase() !== 'zakar') {
+                            throw new Error("Invalid Invite Code");
+                        }
+                    }
                 }
                 
                 if (formData.password !== formData.confirmPassword) {
@@ -153,8 +208,22 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
                     password: formData.password, 
                     position: 'Acquisitions',
                     createdAt: new Date().toISOString(),
-                    loginStatus: 'Logged In' 
+                    loginStatus: 'Logged In',
+                    organization: orgName
                 };
+
+                // If they created a new organization, ensure an Integrations row exists for it
+                if (formData.organizationAction === 'create') {
+                    try {
+                        await api.save({
+                            id: generateId(),
+                            organization: orgName,
+                            inviteCode: formData.inviteCode || 'azre-invite'
+                        }, 'Integrations');
+                    } catch(e) {
+                        console.error("Failed to create integration for new org", e);
+                    }
+                }
 
                 let savedUser = await api.save(newUserPartial, 'Users');
                 
@@ -262,7 +331,55 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
                         </div>
 
                         {isSignup && (
-                             <div>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase font-bold mb-1">Organization Setup</label>
+                                    <div className="flex gap-2">
+                                        <button 
+                                            type="button"
+                                            className={`flex-1 py-2 text-sm font-medium rounded ${formData.organizationAction === 'join' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-[#4ADE80] border border-blue-500 dark:border-[#4ADE80]' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 border border-transparent'}`}
+                                            onClick={() => setFormData({...formData, organizationAction: 'join'})}
+                                        >
+                                            Join Existing
+                                        </button>
+                                        <button 
+                                            type="button"
+                                            className={`flex-1 py-2 text-sm font-medium rounded ${formData.organizationAction === 'create' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-[#4ADE80] border border-blue-500 dark:border-[#4ADE80]' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 border border-transparent'}`}
+                                            onClick={() => setFormData({...formData, organizationAction: 'create'})}
+                                        >
+                                            Create New
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                {formData.organizationAction === 'join' && (
+                                    <div>
+                                        <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase font-bold mb-1">Select Organization</label>
+                                        <select 
+                                            className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded p-3 text-gray-900 dark:text-white focus:border-blue-500 dark:focus:border-[#4ADE80] outline-none transition-colors"
+                                            value={formData.selectedOrganization}
+                                            onChange={e => setFormData({...formData, selectedOrganization: e.target.value})}
+                                            required
+                                        >
+                                            <option value="" disabled>Select an organization</option>
+                                            {organizations.map(org => (
+                                                <option key={org} value={org}>{org}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
+                                
+                                {formData.organizationAction === 'create' && (
+                                    <div>
+                                        <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase font-bold mb-1">Organization Name</label>
+                                        <input required className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded p-3 text-gray-900 dark:text-white focus:border-blue-500 dark:focus:border-[#4ADE80] outline-none transition-colors" placeholder="e.g. AZRE" value={formData.organizationName} onChange={e => setFormData({...formData, organizationName: e.target.value})} />
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        
+                        {isSignup && (
+                            <div>
                                 <label className="block text-xs text-gray-500 dark:text-gray-400 uppercase font-bold mb-1">Confirm Password</label>
                                 <input required type="password" autoComplete="new-password" className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded p-3 text-gray-900 dark:text-white focus:border-blue-500 dark:focus:border-[#4ADE80] outline-none transition-colors" placeholder="••••••••" value={formData.confirmPassword} onChange={e => setFormData({...formData, confirmPassword: e.target.value})} />
                             </div>
@@ -270,8 +387,13 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
 
                         {isSignup && (
                             <div>
-                                <label className="block text-xs text-blue-600 dark:text-[#4ADE80] uppercase font-bold mb-1">Invite Code</label>
+                                <label className="block text-xs text-blue-600 dark:text-[#4ADE80] uppercase font-bold mb-1 flex justify-between">
+                                    <span>{formData.organizationAction === 'create' ? 'Set Invite Code' : 'Join Invite Code'}</span>
+                                </label>
                                 <input required className="w-full bg-gray-50 dark:bg-gray-900 border border-blue-500 dark:border-[#4ADE80] rounded p-3 text-gray-900 dark:text-white focus:ring-1 focus:ring-blue-500 dark:focus:ring-[#4ADE80] outline-none transition-colors" placeholder="Enter code..." value={formData.inviteCode} onChange={e => setFormData({...formData, inviteCode: e.target.value})} />
+                                {formData.organizationAction === 'create' && (
+                                    <p className="text-xs text-gray-500 mt-1">This code will be required for others to join.</p>
+                                )}
                             </div>
                         )}
 
